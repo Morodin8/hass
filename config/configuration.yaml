@@ -1,0 +1,64 @@
+
+# Configure a default setup of Home Assistant (frontend, api, etc)
+default_config:
+
+# Text to speech
+tts:
+  - platform: google_translate
+
+group: !include groups.yaml
+automation: !include automations.yaml
+script: !include scripts.yaml
+scene: !include scenes.yaml
+
+# SMTP notification
+notify:
+  - name: gmail
+    platform: smtp
+    server: smtp.gmail.com
+    port: 587
+    timeout: 15
+    sender: !secret email_gmail
+    encryption: starttls
+    username: !secret email_gmail
+    password: !secret gmail_token
+    recipient:
+      - !secret email_gmail2
+      - !secret email_hotmail
+    sender_name: My Home Assistant
+  - name: hotmail
+    platform: smtp
+    server: smtp.gmail.com
+    port: 587
+    timeout: 15
+    sender: !secret email_gmail
+    encryption: starttls
+    username: !secret email_gmail
+    password: !secret gmail_token
+    recipient:
+      - !secret email_hotmail
+    sender_name: My Home Assistant
+
+http:
+  ssl_certificate: /ssl/fullchain.pem
+  ssl_key: /ssl/privkey.pem
+  
+sensor:
+  - platform: dht
+    sensor: DHT11
+    pin: 4
+    monitored_conditions:
+      - temperature
+      - humidity
+
+eufy:
+  devices:
+    - address: 192.168.0.37
+      access_token: !secret eufy_token
+      type: T1203
+      name: Smart Plug (UK)
+      
+nest: !include nest_config.yaml
+  
+# Example configuration.yaml entry
+google_assistant: !include google_assistant.yaml
