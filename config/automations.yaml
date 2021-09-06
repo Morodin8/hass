@@ -1,0 +1,225 @@
+- id: '1620397620509'
+  alias: Someone at the door
+  description: Doorbell
+  trigger:
+  - type: turned_on
+    platform: device
+    device_id: 3eac44964fe96fdd91db660770d79665
+    entity_id: binary_sensor.doorbell
+    domain: binary_sensor
+  condition: []
+  action:
+  - service: notify.mobile_app_GrayS10
+    data:
+      message: Someone's at the door
+  - service: notify.mobile_app_susans10
+    data:
+      message: Someone's at the door
+  - service: notify.gmail
+    data:
+      message: Someone's at the door
+      title: Doorbell
+  - service: media_player.volume_set
+    target:
+      entity_id: media_player.house
+    data:
+      volume_level: 0.7
+  - service: media_player.play_media
+    target:
+      entity_id: media_player.house
+    data:
+      media_content_type: music
+      media_content_id: media-source://media_source/local/Doorbell.mp3
+  mode: single
+- id: '1622036751338'
+  alias: Sonoff off
+  description: ''
+  trigger:
+  - type: not_connected
+    platform: device
+    device_id: 3eac44964fe96fdd91db660770d79665
+    entity_id: binary_sensor.sonoff_rf_bridge_status
+    domain: binary_sensor
+  condition: []
+  action:
+  - service: notify.hotmail
+    data:
+      message: Sonoff off
+      title: Sonoff off
+  mode: single
+- id: '1622038959427'
+  alias: Sonoff on
+  description: ''
+  trigger:
+  - type: connected
+    platform: device
+    device_id: 3eac44964fe96fdd91db660770d79665
+    entity_id: binary_sensor.sonoff_rf_bridge_status
+    domain: binary_sensor
+  condition: []
+  action:
+  - service: notify.hotmail
+    data:
+      message: Sonoff on
+      title: Sonoff on
+  mode: single
+- id: '1626450380672'
+  alias: HVAC Mode
+  description: ''
+  trigger:
+  - platform: state
+    entity_id: input_select.kitchen_hvac_mode
+  condition: []
+  action:
+  - service: notify.mobile_app_grays10
+    data:
+      message: HVAC mode {{ states.input_select.kitchen_hvac_mode.state }}
+  - service: notify.gmail
+    data:
+      message: HVAC mode {{ states.input_select.kitchen_hvac_mode.state }}.
+      title: HVAC mode {{ states.input_select.kitchen_hvac_mode.state }}
+  mode: single
+- id: '1626626196495'
+  alias: Power tripped
+  description: ''
+  trigger:
+  - type: not_connected
+    platform: device
+    device_id: 3eac44964fe96fdd91db660770d79665
+    entity_id: binary_sensor.sonoff_rf_bridge_status
+    domain: binary_sensor
+    for:
+      hours: 0
+      minutes: 5
+      seconds: 0
+      milliseconds: 0
+  condition: []
+  action:
+  - service: notify.mobile_app_susans10
+    data:
+      message: Power tripped
+  - service: notify.mobile_app_grays10
+    data:
+      message: Power tripped
+  - service: notify.gmail
+    data:
+      message: Power tripped
+      title: Power tripped
+  mode: single
+- id: '1627054473563'
+  alias: Heating on
+  description: ''
+  trigger:
+  - platform: state
+    entity_id: climate.kitchen
+    attribute: hvac_action
+    to: heating
+    id: heating_action
+  condition: []
+  action:
+  - service: notify.mobile_app_grays10
+    data:
+      message: Heating on
+  - service: notify.gmail
+    data:
+      message: Heating on
+      title: Heating on
+  mode: single
+- id: '1627055117609'
+  alias: Heating off
+  description: ''
+  trigger:
+  - platform: state
+    entity_id: climate.kitchen
+    attribute: hvac_action
+    to: 'off'
+    id: heating_action
+  condition: []
+  action:
+  - service: notify.mobile_app_grays10
+    data:
+      message: Heating off
+  - service: notify.gmail
+    data:
+      message: Heating off
+      title: Heating off
+  mode: single
+- id: '1627304083229'
+  alias: Thermostat off
+  description: ''
+  trigger:
+  - platform: device
+    device_id: b19694817d3e24bb0e046ae4cb59061d
+    domain: climate
+    entity_id: climate.kitchen
+    type: hvac_mode_changed
+    to: 'off'
+  condition: []
+  action:
+  - service: notify.mobile_app_grays10
+    data:
+      message: Thermostat off
+  - service: notify.gmail
+    data:
+      message: Thermostat off
+      title: Thermostat off
+  mode: single
+- id: '1627304320339'
+  alias: Thermostat heat
+  description: ''
+  trigger:
+  - platform: device
+    device_id: b19694817d3e24bb0e046ae4cb59061d
+    domain: climate
+    entity_id: climate.kitchen
+    type: hvac_mode_changed
+    to: heat
+  condition: []
+  action:
+  - service: notify.mobile_app_grays10
+    data:
+      message: Thermostat heat
+  - service: notify.gmail
+    data:
+      message: Thermostat heat
+      title: Thermostat heat
+  mode: single
+- id: '1630512391225'
+  alias: Blinds Open
+  description: ''
+  trigger:
+  - platform: sun
+    event: sunrise
+    offset: 02:00:00
+  condition: []
+  action:
+  - device_id: 7171a7316f4a8d109003d570def12f26
+    domain: cover
+    entity_id: cover.somfy_cover
+    type: close
+  mode: single
+- id: '1630673076060'
+  alias: Blinds Close
+  description: ''
+  trigger:
+  - platform: sun
+    event: sunset
+  condition:
+  - type: is_temperature
+    condition: device
+    device_id: b19694817d3e24bb0e046ae4cb59061d
+    entity_id: sensor.kitchen_temperature
+    domain: sensor
+    below: 20
+  - condition: or
+    conditions:
+    - condition: state
+      entity_id: climate.kitchen
+      attribute: hvac_action
+      state: heating
+  action:
+  - device_id: 7171a7316f4a8d109003d570def12f26
+    domain: cover
+    entity_id: cover.somfy_cover
+    type: open
+  mode: single
