@@ -1,0 +1,92 @@
+substitutions:
+  device_name: sonoff-rf-bridge
+  
+esphome:
+  name: ${device_name}
+  platform: ESP8266
+  board: esp01_1m
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  power_save_mode: none
+  manual_ip:
+    static_ip: 192.168.0.41
+    gateway: 192.168.0.1
+    subnet: 255.255.255.0
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: !secret sonoff_fallback_ssid
+    password: !secret sonoff_fallback_password
+
+captive_portal:
+
+# need to disable uart logging as it will interfere
+logger:
+  baud_rate: 0
+  
+# Enable Web server.
+web_server:
+  port: 80
+
+# Enable Home Assistant API
+api:
+  password: !secret api_password
+#  services:
+#  - service: start_advanced_sniff
+#    then:
+#      - rf_bridge.start_advanced_sniffing
+
+# Enable over-the-air updates.
+ota:
+  password: !secret api_password
+
+# Sync time with Home Assistant.
+time:
+  - platform: homeassistant
+    id: homeassistant_time
+
+# Sensors with general information.
+sensor:
+  - platform: wifi_signal
+    name: ${device_name} Wifi Signal
+    update_interval: 60s
+  - platform: uptime
+    name: ${device_name} Uptime
+    unit_of_measurement: days
+    update_interval: 300s
+    accuracy_decimals: 2
+    filters:
+      - multiply: 0.000011574
+
+binary_sensor:
+  - platform: status
+    name: ${device_name} Status
+  - platform: remote_receiver
+    name: "Doorbell"
+    filters:
+      - delayed_off: 10s
+    rc_switch_raw:
+      code: "001011101011100011000010"
+      protocol: 6
+
+remote_receiver:
+  pin: 
+   number: GPIO4
+   inverted: yes
+  dump:
+    - rc_switch
+  tolerance: 50%
+  filter: 4us
+  idle: 4ms
+  buffer_size: 2kb
+
+remote_transmitter:
+  pin: GPIO5
+  carrier_duty_percent: 100%
+
+status_led:
+  pin:
+    number: GPIO13
+    inverted: yes
