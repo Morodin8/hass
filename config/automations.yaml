@@ -252,3 +252,26 @@
     entity_id: cover.somfy_cover
     type: close
   mode: single
+- id: '1631017824414'
+  alias: Blinds Open (Hot)
+  description: Open the blinds in the evening if it is hot
+  trigger:
+  - platform: sun
+    event: sunset
+  condition:
+  - type: is_temperature
+    condition: device
+    device_id: b19694817d3e24bb0e046ae4cb59061d
+    entity_id: sensor.kitchen_temperature
+    domain: sensor
+    above: 23
+  - condition: state
+    entity_id: climate.kitchen
+    state: 'off'
+    attribute: hvac_modes
+  action:
+  - device_id: 7171a7316f4a8d109003d570def12f26
+    domain: cover
+    entity_id: cover.somfy_cover
+    type: open
+  mode: single
