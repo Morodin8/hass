@@ -186,24 +186,25 @@
   mode: single
 - id: '1630512391225'
   alias: Blinds Open
-  description: ''
+  description: Open the blinds in the morning
   trigger:
   - platform: sun
     event: sunrise
-    offset: 02:00:00
+    offset: 01:00:00
   condition: []
   action:
   - device_id: 7171a7316f4a8d109003d570def12f26
     domain: cover
     entity_id: cover.somfy_cover
-    type: close
+    type: open
   mode: single
 - id: '1630673076060'
-  alias: Blinds Close
-  description: ''
+  alias: Blinds Close (Cold)
+  description: Close the blinds when it is cold
   trigger:
   - platform: sun
     event: sunset
+    id: sunset
   condition:
   - type: is_temperature
     condition: device
@@ -221,5 +222,33 @@
   - device_id: 7171a7316f4a8d109003d570def12f26
     domain: cover
     entity_id: cover.somfy_cover
-    type: open
+    type: close
+  mode: single
+- id: '1631012373244'
+  alias: Blinds Close (Hot)
+  description: Close the blinds when it is hot
+  trigger:
+  - platform: state
+    entity_id: weather.huis
+    attribute: temperature
+    to: '22'
+  condition:
+  - type: is_temperature
+    condition: device
+    device_id: b19694817d3e24bb0e046ae4cb59061d
+    entity_id: sensor.kitchen_temperature
+    domain: sensor
+    below: 0
+    above: 22
+  - condition: and
+    conditions:
+    - condition: state
+      entity_id: climate.kitchen
+      state: 'off'
+      attribute: hvac_action
+  action:
+  - device_id: 7171a7316f4a8d109003d570def12f26
+    domain: cover
+    entity_id: cover.somfy_cover
+    type: close
   mode: single
