@@ -19,6 +19,10 @@
     data:
       message: Someone's at the door
       title: Doorbell
+  - service: notify.hotmail
+    data:
+      message: Someone's at the door
+      title: Doorbell
   - service: media_player.volume_set
     target:
       entity_id: media_player.house
@@ -29,7 +33,7 @@
       entity_id: media_player.house
     data:
       media_content_type: music
-      media_content_id: media-source://media_source/local/Doorbell.mp3
+      media_content_id: media-source://media_source/Doorbell.mp3
   mode: single
 - id: '1622036751338'
   alias: Sonoff off
@@ -63,22 +67,6 @@
       message: Sonoff on
       title: Sonoff on
   mode: single
-- id: '1626450380672'
-  alias: HVAC Mode
-  description: ''
-  trigger:
-  - platform: state
-    entity_id: input_select.kitchen_hvac_mode
-  condition: []
-  action:
-  - service: notify.mobile_app_grays10
-    data:
-      message: HVAC mode {{ states.input_select.kitchen_hvac_mode.state }}
-  - service: notify.gmail
-    data:
-      message: HVAC mode {{ states.input_select.kitchen_hvac_mode.state }}.
-      title: HVAC mode {{ states.input_select.kitchen_hvac_mode.state }}
-  mode: single
 - id: '1626626196495'
   alias: Power tripped
   description: ''
@@ -90,7 +78,7 @@
     domain: binary_sensor
     for:
       hours: 0
-      minutes: 5
+      minutes: 20
       seconds: 0
       milliseconds: 0
   condition: []
@@ -105,44 +93,10 @@
     data:
       message: Power tripped
       title: Power tripped
-  mode: single
-- id: '1627054473563'
-  alias: Heating on
-  description: ''
-  trigger:
-  - platform: state
-    entity_id: climate.kitchen
-    attribute: hvac_action
-    to: heating
-    id: heating_action
-  condition: []
-  action:
-  - service: notify.mobile_app_grays10
+  - service: notify.hotmail
     data:
-      message: Heating on
-  - service: notify.gmail
-    data:
-      message: Heating on
-      title: Heating on
-  mode: single
-- id: '1627055117609'
-  alias: Heating off
-  description: ''
-  trigger:
-  - platform: state
-    entity_id: climate.kitchen
-    attribute: hvac_action
-    to: 'off'
-    id: heating_action
-  condition: []
-  action:
-  - service: notify.mobile_app_grays10
-    data:
-      message: Heating off
-  - service: notify.gmail
-    data:
-      message: Heating off
-      title: Heating off
+      message: Power tripped
+      title: Power tripped
   mode: single
 - id: '1627304083229'
   alias: Thermostat off
@@ -151,7 +105,7 @@
   - platform: device
     device_id: b19694817d3e24bb0e046ae4cb59061d
     domain: climate
-    entity_id: climate.kitchen
+    entity_id: climate.nest_thermometer
     type: hvac_mode_changed
     to: 'off'
   condition: []
@@ -163,6 +117,10 @@
     data:
       message: Thermostat off
       title: Thermostat off
+  - service: notify.hotmail
+    data:
+      message: Thermostat off
+      title: Thermostat off
   mode: single
 - id: '1627304320339'
   alias: Thermostat heat
@@ -171,7 +129,7 @@
   - platform: device
     device_id: b19694817d3e24bb0e046ae4cb59061d
     domain: climate
-    entity_id: climate.kitchen
+    entity_id: climate.nest_thermometer
     type: hvac_mode_changed
     to: heat
   condition: []
@@ -183,16 +141,48 @@
     data:
       message: Thermostat heat
       title: Thermostat heat
+  - service: notify.hotmail
+    data:
+      message: Thermostat heat
+      title: Thermostat heat
   mode: single
 - id: '1630512391225'
-  alias: Blinds Open
+  alias: Blinds Open (AM)
   description: Open the blinds in the morning
   trigger:
   - platform: sun
     event: sunrise
-    offset: 01:00:00
-  condition: []
+    offset: 00:30:00
+  condition:
+  - condition: state
+    entity_id: climate.nest_thermometer
+    state: 'off'
+    attribute: hvac_action
+    for:
+      hours: 3
+      minutes: 0
+      seconds: 0
+      milliseconds: 0
+  - condition: or
+    conditions:
+    - condition: template
+      value_template: '{{ state_attr(''weather.huis_hourly'', ''forecast'')[:8] |
+        map(attribute=''temperature'') | list | max >= 19 }}'
+    - condition: and
+      conditions:
+      - condition: template
+        value_template: '{{ state_attr(''weather.huis_hourly'', ''forecast'')[:8]
+          | map(attribute=''temperature'') | list | max < 19 }}'
+      - condition: template
+        value_template: '"{{ state_attr(''weather.huis_hourly'', ''forecast'')[:7]
+          | selectattr(''condition'', ''in'', [''sunny'', ''partlycloudy'']) | list
+          | count > 0 }}"'
   action:
+  - service: notify.mobile_app_grays10
+    data:
+      message: "Blinds Open (AM) {{ state_attr('weather.huis_hourly', 'forecast')[:8]\
+        \ |\n  map(attribute='temperature') | list | max }}, {{\nstate_attr('weather.huis_hourly',\
+        \ 'forecast')[3:7] | list |\nmap(attribute='condition') | unique | list }}"
   - device_id: 7171a7316f4a8d109003d570def12f26
     domain: cover
     entity_id: cover.somfy_cover
@@ -205,48 +195,36 @@
   - platform: sun
     event: sunset
     id: sunset
+  - platform: numeric_state
+    entity_id: climate.nest_thermometer
+    attribute: current_temperature
+    below: '20'
   condition:
-  - type: is_temperature
-    condition: device
-    device_id: b19694817d3e24bb0e046ae4cb59061d
-    entity_id: sensor.kitchen_temperature
-    domain: sensor
-    below: 20
   - condition: or
     conditions:
+    - type: is_temperature
+      condition: device
+      device_id: b19694817d3e24bb0e046ae4cb59061d
+      entity_id: sensor.nest_thermometer_temperature
+      domain: sensor
+      below: 20
     - condition: state
-      entity_id: climate.kitchen
+      entity_id: climate.nest_thermometer
       attribute: hvac_action
       state: heating
+    - condition: template
+      value_template: '{{ state_attr(''weather.huis_hourly'', ''forecast'')[:2] |
+        map(attribute=''temperature'') | list | min < 15 }}'
+  - condition: sun
+    before: sunrise
+    after: sunset
+    before_offset: '24:00:00'
   action:
-  - device_id: 7171a7316f4a8d109003d570def12f26
-    domain: cover
-    entity_id: cover.somfy_cover
-    type: close
-  mode: single
-- id: '1631012373244'
-  alias: Blinds Close (Hot)
-  description: Close the blinds when it is hot
-  trigger:
-  - platform: state
-    entity_id: weather.huis
-    attribute: temperature
-    to: '22'
-  condition:
-  - type: is_temperature
-    condition: device
-    device_id: b19694817d3e24bb0e046ae4cb59061d
-    entity_id: sensor.kitchen_temperature
-    domain: sensor
-    below: 0
-    above: 22
-  - condition: and
-    conditions:
-    - condition: state
-      entity_id: climate.kitchen
-      state: 'off'
-      attribute: hvac_action
-  action:
+  - service: notify.mobile_app_grays10
+    data:
+      message: "Blinds Close (Cold), thermometer {{ state_attr('climate.nest_thermometer',\
+        \ 'current_temperature') }}, forecast {{ state_attr('weather.huis_hourly',\
+        \ 'forecast')[:2] |\n  map(attribute='temperature') | list | min }}"
   - device_id: 7171a7316f4a8d109003d570def12f26
     domain: cover
     entity_id: cover.somfy_cover
@@ -258,20 +236,228 @@
   trigger:
   - platform: sun
     event: sunset
+    offset: -02:00:00
   condition:
   - type: is_temperature
     condition: device
     device_id: b19694817d3e24bb0e046ae4cb59061d
-    entity_id: sensor.kitchen_temperature
+    entity_id: sensor.nest_thermometer_temperature
     domain: sensor
-    above: 23
+    above: 22
   - condition: state
-    entity_id: climate.kitchen
+    entity_id: climate.nest_thermometer
     state: 'off'
-    attribute: hvac_modes
+    attribute: hvac_action
+    for:
+      hours: 5
+      minutes: 0
+      seconds: 0
+      milliseconds: 0
   action:
+  - service: notify.mobile_app_grays10
+    data:
+      message: Blinds Open (Hot), {{ state_attr('climate.nest_thermometer', 'current_temperature')
+        }}
   - device_id: 7171a7316f4a8d109003d570def12f26
     domain: cover
     entity_id: cover.somfy_cover
     type: open
+  mode: single
+- id: '1631786801519'
+  alias: Weather forecast
+  description: weather max temp
+  trigger:
+  - platform: time
+    at: 08:15
+  condition: []
+  action:
+  - service: notify.mobile_app_grays10
+    data:
+      message: Weather forecast {{ state_attr('weather.huis_hourly', 'forecast')[:8]
+        | map(attribute='temperature') | list | max }},  {{ state_attr('weather.huis_hourly',
+        'forecast')[3:7] | list | map(attribute='condition') | unique | list }}
+  mode: single
+- id: '1632209378852'
+  alias: Blinds Close (Forecast Hot Sun)
+  description: Close the blinds when the forecast says it is going to be hot
+  trigger:
+  - platform: template
+    value_template: '{{ state_attr(''weather.huis_hourly'', ''forecast'')[:7] | map(attribute=''temperature'')
+      | list | max > 23 }}'
+  condition:
+  - condition: sun
+    before: sunset
+    before_offset: -06:00:00
+    after: sunrise
+  - condition: state
+    entity_id: climate.nest_thermometer
+    state: 'off'
+    attribute: hvac_action
+    for:
+      hours: 0
+      minutes: 0
+      seconds: 0
+      milliseconds: 0
+  - condition: or
+    conditions:
+    - condition: template
+      value_template: '{{ state_attr(''weather.huis_hourly'', ''forecast'')[:7] |
+        map(attribute=''temperature'') | list | max > 23 }}'
+    - condition: and
+      conditions:
+      - condition: template
+        value_template: '{{ state_attr(''weather.huis_hourly'', ''forecast'')[:7]
+          | map(attribute=''temperature'') | list | max > 20 }}'
+      - condition: or
+        conditions:
+        - condition: template
+          value_template: '{{ state_attr(''weather.huis_hourly'', ''forecast'')[3:7]
+            | selectattr(''condition'', ''in'', [''sunny'', ''partlycloudy'']) | list
+            | count > 0 }}'
+  action:
+  - service: notify.mobile_app_grays10
+    data:
+      message: Blinds Close (Forecast Hot Sun) {{ state_attr('weather.huis_hourly',
+        'forecast')[:7] | map(attribute='temperature') | list | max }},  {{ state_attr('weather.huis_hourly',
+        'forecast')[3:7] | selectattr('condition', 'in', ['sunny', 'partlycloudy'])
+        | list | map(attribute='condition') | unique | list }}
+  mode: single
+- id: '1632210788661'
+  alias: Blinds Close (Forecast Hot)
+  description: Close the blinds when the forecast says it is going to be hot
+  trigger:
+  - platform: time
+    at: 08:45
+  condition:
+  - condition: state
+    entity_id: climate.nest_thermometer
+    state: 'off'
+    attribute: hvac_action
+    for:
+      hours: 3
+      minutes: 0
+      seconds: 0
+      milliseconds: 0
+  - condition: or
+    conditions:
+    - condition: template
+      value_template: '{{ state_attr(''weather.huis_hourly'', ''forecast'')[:8] |
+        map(attribute=''temperature'') | list | max > 23 }}'
+    - condition: and
+      conditions:
+      - condition: template
+        value_template: '{{ state_attr(''weather.huis_hourly'', ''forecast'')[:8]
+          | map(attribute=''temperature'') | list | max > 20 }}'
+      - condition: template
+        value_template: '"{{ state_attr(''weather.huis_hourly'', ''forecast'')[3:7]
+          | selectattr(''condition'', ''in'', [''sunny'', ''partlycloudy'']) | list
+          | count > 0 }}"'
+  action:
+  - service: notify.mobile_app_grays10
+    data:
+      message: Blinds Close (Forecast Hot)  {{ state_attr('weather.huis_hourly', 'forecast')[:8]
+        | map(attribute='temperature') | list | max }},  {{ state_attr('weather.huis_hourly',
+        'forecast')[3:7] | selectattr('condition', 'in', ['sunny', 'partlycloudy'])
+        | list | map(attribute='condition') | unique | list }}
+  mode: single
+- id: '1632491139519'
+  alias: Blinds Close (Hot)
+  description: Close the blinds when it is hot
+  trigger:
+  - platform: numeric_state
+    entity_id: climate.nest_thermometer
+    attribute: current_temperature
+    above: '23'
+  condition:
+  - condition: sun
+    before: sunset
+    before_offset: -06:00:00
+    after: sunrise
+  - condition: state
+    entity_id: climate.nest_thermometer
+    state: 'off'
+    attribute: hvac_action
+    for:
+      hours: 5
+      minutes: 0
+      seconds: 0
+      milliseconds: 0
+  - condition: template
+    value_template: '{{ state_attr(''weather.huis_hourly'', ''forecast'')[:5] | selectattr(''condition'',
+      ''in'', [''sunny'', ''partlycloudy'']) | list | count > 0 }}'
+  - condition: template
+    value_template: '{{ state_attr(''weather.huis_hourly'', ''forecast'')[:5] | map(attribute=''temperature'')
+      | list | max > 19 }}'
+  action:
+  - service: notify.mobile_app_grays10
+    data:
+      message: Blinds Close (Hot), thermometer {{ state_attr('climate.nest_thermometer','current_temperature')
+        }},  forecast {{ state_attr('weather.huis_hourly', 'forecast')[:5] | map(attribute='temperature')
+        | list | max }}, {{ state_attr('weather.huis_hourly', 'forecast')[:5] | map(attribute='condition')
+        | unique | list }}
+  - device_id: 7171a7316f4a8d109003d570def12f26
+    domain: cover
+    entity_id: cover.somfy_cover
+    type: close
+  mode: single
+- id: '1632995350298'
+  alias: Blinds Open (Sunny)
+  description: Open the blinds when it is cold but sunny
+  trigger:
+  - platform: time_pattern
+    minutes: '1'
+  condition:
+  - condition: sun
+    before: sunset
+    before_offset: -03:00:00
+    after: sunrise
+    after_offset: 02:00:00
+  - condition: template
+    value_template: '{{ state_attr(''weather.huis_hourly'', ''forecast'')[0].temperature
+      < 19 }}'
+  - condition: or
+    conditions:
+    - condition: template
+      value_template: '{{ state_attr(''weather.huis_hourly'', ''forecast'')[0].condition
+        == ''sunny'' }}'
+    - condition: template
+      value_template: '{{ state_attr(''weather.huis_hourly'', ''forecast'')[0].condition
+        == ''partlycloudy'' }}'
+  action:
+  - service: notify.mobile_app_grays10
+    data:
+      message: Blinds Open (Sunny) {{ state_attr('weather.huis_hourly', 'forecast')[0].temperature
+        }}, {{ state_attr('weather.huis_hourly', 'forecast')[:3] | map(attribute='condition')
+        | list }}
+  - device_id: 7171a7316f4a8d109003d570def12f26
+    domain: cover
+    entity_id: cover.somfy_cover
+    type: open
+  mode: single
+- id: '1634035203091'
+  alias: Heating
+  description: ''
+  trigger:
+  - platform: state
+    entity_id: climate.nest_thermometer
+    attribute: hvac_action
+    id: heating_action
+  condition: []
+  action:
+  - service: notify.mobile_app_grays10
+    data:
+      message: Heating ({{ state_attr('climate.nest_thermometer','hvac_action') }})
+        {{ state_attr('climate.nest_thermometer','current_temperature') }}
+  - service: notify.gmail
+    data:
+      message: Heating ({{ state_attr('climate.nest_thermometer','hvac_action') }})
+        {{ state_attr('climate.nest_thermometer','current_temperature') }}
+      title: Heating ({{ state_attr('climate.nest_thermometer','hvac_action') }})
+        {{ state_attr('climate.nest_thermometer','current_temperature') }}
+  - service: notify.hotmail
+    data:
+      message: Heating ({{ state_attr('climate.nest_thermometer','hvac_action') }})
+        {{ state_attr('climate.nest_thermometer','current_temperature') }}
+      title: Heating ({{ state_attr('climate.nest_thermometer','hvac_action') }})
+        {{ state_attr('climate.nest_thermometer','current_temperature') }}
   mode: single
