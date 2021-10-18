@@ -1,0 +1,25 @@
+  - name: gmail
+    platform: smtp
+    server: smtp.live.com
+    port: 587
+    timeout: 15
+    sender: !secret email_hotmail
+    encryption: starttls
+    username: !secret email_hotmail
+    password: !secret hotmail_token
+    recipient:
+      - !secret email_gmail2
+      - !secret email_hotmail
+    sender_name: My Home Assistant
+  - name: hotmail
+    platform: smtp
+    server: smtp.live.com
+    port: 587
+    timeout: 15
+    sender: !secret email_hotmail
+    encryption: starttls
+    username: !secret email_hotmail
+    password: !secret hotmail_token
+    recipient:
+      - !secret email_hotmail
+    sender_name: My Home Assistant
