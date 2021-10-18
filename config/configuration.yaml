@@ -12,32 +12,7 @@ script: !include scripts.yaml
 scene: !include scenes.yaml
 
 # SMTP notification
-notify:
-  - name: gmail
-    platform: smtp
-    server: smtp.gmail.com
-    port: 587
-    timeout: 15
-    sender: !secret email_gmail
-    encryption: starttls
-    username: !secret email_gmail
-    password: !secret gmail_token
-    recipient:
-      - !secret email_gmail2
-      - !secret email_hotmail
-    sender_name: My Home Assistant
-  - name: hotmail
-    platform: smtp
-    server: smtp.gmail.com
-    port: 587
-    timeout: 15
-    sender: !secret email_gmail
-    encryption: starttls
-    username: !secret email_gmail
-    password: !secret gmail_token
-    recipient:
-      - !secret email_hotmail
-    sender_name: My Home Assistant
+notify: !include outlook_config.yaml
 
 http:
   ssl_certificate: /ssl/fullchain.pem
