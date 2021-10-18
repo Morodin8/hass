@@ -61,22 +61,53 @@ cover:
     lambda: |-
       auto somfy_remote = new SomfyESPRemote();
       somfy_remote->add_cover("somfy", "kitchen", SOMFY_REMOTE_KITCHEN);
+      somfy_remote->add_cover("somfy", "kitchen1", SOMFY_REMOTE_KITCHEN_1);
+      somfy_remote->add_cover("somfy", "kitchen2", SOMFY_REMOTE_KITCHEN_2);
+      somfy_remote->add_cover("somfy", "kitchen3", SOMFY_REMOTE_KITCHEN_3);
+      somfy_remote->add_cover("somfy", "kitchen4", SOMFY_REMOTE_KITCHEN_4);
       App.register_component(somfy_remote);
       return somfy_remote->covers;
 
     covers:
       - id: "somfy"
         name: "Somfy Cover"
+      - id: "somfy1"
+        name: "Somfy Cover1"
+      - id: "somfy2"
+        name: "Somfy Cover2"
+      - id: "somfy3"
+        name: "Somfy Cover3"
+      - id: "somfy4"
+        name: "Somfy Cover4"
 
 switch:
+  - platform: template
+    name: "STOP"
+    turn_on_action:
+      - lambda: |-
+          ((SomfyESPCover*)id(somfy))->stop();
   - platform: template
     name: "PROG"
     turn_on_action:
       - lambda: |-
           ((SomfyESPCover*)id(somfy))->program();
   - platform: template
-    name: "STOP"
+    name: "PROG1"
     turn_on_action:
       - lambda: |-
-          ((SomfyESPCover*)id(somfy))->stop();
-
+          ((SomfyESPCover*)id(somfy1))->program();
+  - platform: template
+    name: "PROG2"
+    turn_on_action:
+      - lambda: |-
+          ((SomfyESPCover*)id(somfy2))->program();
+  - platform: template
+    name: "PROG3"
+    turn_on_action:
+      - lambda: |-
+          ((SomfyESPCover*)id(somfy3))->program();
+  - platform: template
+    name: "PROG4"
+    turn_on_action:
+      - lambda: |-
+          ((SomfyESPCover*)id(somfy4))->program();
