@@ -6,9 +6,10 @@ esphome:
   platform: ESP32
   board: nodemcu-32s
   libraries:
-    - SmartRC-CC1101-Driver-Lib@2.5.6
-    - Somfy_Remote_Lib@0.4.0
+    - SPI
     - EEPROM
+    - SmartRC-CC1101-Driver-Lib@2.5.7
+    - Somfy_Remote_Lib@0.4.1
   includes:
     - somfy_secrets.h
     - somfy_cover.h
@@ -89,7 +90,7 @@ switch:
     name: "STOP"
     turn_on_action:
       - lambda: |-
-          ((SomfyESPCover*)id(somfy))->stop();
+          ((SomfyESPCover*)id(somfy))->make_call().set_command_stop();
   - platform: template
     name: "PROG"
     turn_on_action:
