@@ -42,6 +42,10 @@ web_server:
 time:
   - platform: homeassistant
     id: homeassistant_time
+    
+binary_sensor:
+  - platform: status
+    name: ${device_name} Status
 
 # Sensors with general information.
 sensor:
