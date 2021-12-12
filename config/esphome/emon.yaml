@@ -1,0 +1,297 @@
+substitutions:
+  pin_set_delay: 2s
+  component_update_delay: 500ms
+  update_time: 20s # must be > (pin_set_delay+component_update_delay*2) * channels
+  ct_update_time: never
+  device_name: emon
+  ic1Volts: '230'
+  solarVolts: '230' # '254'
+# filters
+  intoZero: '0.0005' # '0.00049'
+  # known load in Amps (known Watts / Volts)
+  known125w: '0.544'
+  known900w: '3.913'
+  known2300w: '10.0'
+  known3300w: '14.348' # '15.65'
+  known6000w: '26.09'
+  # value in logs
+  logs125w: '0.0085' # '0.005', '0.0035', 0.00134'
+  logs900w: '0.009' # '0.006', 0.0055'
+  logs2300w: '0.0157' # '0.0158'
+  logs3300w: '0.025'
+  logs6000w: '0.048' # '0.047'
+
+esphome:
+  name: ${device_name}
+  platform: ESP8266
+  board: d1_mini
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: !secret power_fallback_ssid
+    password: !secret power_fallback_password
+
+# Enable Home Assistant API
+api:
+  password: !secret api_password
+
+ota:
+  password: !secret ota_password
+    
+# Enable Web server.
+web_server:
+  port: 80
+
+# Enable logging
+logger:
+
+captive_portal:
+
+time:
+  - platform: homeassistant
+    id: homeassistant_time
+
+
+#.......................................
+#...Below script sets up PIN A and B ...
+#......then tells CT# to update.........
+#.......................................
+
+interval:
+  - interval: ${update_time}
+    then:
+      - script.execute: readCTs
+script:
+  - id: readCTs
+    then:
+    # A	B  CT
+    # 0	0  1
+    # 0	1  2
+    # 1	0  3
+    # 1	1  4
+    # setup for CT1 A=0 B=0 - ct1Amps
+      - output.turn_off: pinA
+      - output.turn_off: pinB
+      - delay: ${pin_set_delay}
+      - component.update: ct1Amps
+      - delay: ${component_update_delay}
+      - component.update: ct1Watts
+      - delay: ${component_update_delay}
+    # setup for CT2 A=0 B=1 - ct2Amps
+      - output.turn_off: pinA
+      - output.turn_on: pinB
+      - delay: ${pin_set_delay}
+      - component.update: ct2Amps
+      - delay: ${component_update_delay}
+      - component.update: ct2Watts
+      - delay: ${component_update_delay}
+    # setup for CT3 A=1 B=0 - ct3Amps
+      - output.turn_on: pinA
+      - output.turn_off: pinB
+      - delay: ${pin_set_delay}
+      - component.update: ct3Amps
+      - delay: ${component_update_delay}
+      - component.update: ct3Watts
+      - delay: ${component_update_delay}
+    # setup for CT4 A=1 B=1 - ct4Amps
+      - output.turn_on: pinA
+      - output.turn_on: pinB
+      - delay: ${pin_set_delay}
+      - component.update: ct4Amps
+      - delay: ${component_update_delay}
+      - component.update: ct4Watts
+      - delay: ${component_update_delay}
+
+
+binary_sensor:
+  - platform: status
+    name: ${device_name} Status
+    
+switch:
+  - platform: restart
+    name: "Restart"
+
+output:
+  - platform: gpio
+    pin: D1
+    id: pinB
+  - platform: gpio
+    pin: D2
+    id: pinA
+
+
+sensor:
+  - platform: wifi_signal
+    name: ${device_name} Wifi Signal
+    update_interval: 60s
+  - platform: uptime
+    name: ${device_name} Uptime
+    unit_of_measurement: days
+    update_interval: 300s
+    accuracy_decimals: 2
+    filters:
+      - multiply: 0.000011574
+    id: Uptime
+
+  - platform: adc
+    pin: A0
+    id: adc_sensor
+#    attenuation: 11db #esp32 only
+
+#Apms
+# Channel 1: Solar
+  - platform: ct_clamp
+    sensor: adc_sensor
+    name: ct1Amps, solar
+    id: ct1Amps
+    unit_of_measurement: A
+    accuracy_decimals: 5
+    sample_duration: 200ms
+    update_interval: ${ct_update_time}
+    filters:
+      - calibrate_linear:
+          - ${intoZero} -> 0
+          - ${logs125w} -> ${known125w}
+          - ${logs900w} -> ${known900w}
+          - ${logs2300w} -> ${known2300w}
+          - ${logs3300w} -> ${known3300w}
+          - ${logs6000w} -> ${known6000w}
+      # # filter nagative
+      # - lambda: |-
+      #     if (x > 0) return x;
+      #     else return 0;
+
+# Channel 2: EV
+  - platform: ct_clamp
+    sensor: adc_sensor
+    name: ct2Amps, EV
+    id: ct2Amps
+    unit_of_measurement: A
+    accuracy_decimals: 5
+    sample_duration: 200ms
+    update_interval: ${ct_update_time}
+    filters:
+      - calibrate_linear:
+          - ${intoZero} -> 0
+          - ${logs3300w} -> ${known3300w}
+      # filter less than 230W, equates no power throughput
+      - lambda: |-
+          if (x > 1) return x;
+          else return 0;
+  
+# Channel 3: Dryer
+  - platform: ct_clamp
+    sensor: adc_sensor
+    name: ct3Amps, dryer
+    id: ct3Amps
+    unit_of_measurement: A
+    accuracy_decimals: 5
+    sample_duration: 200ms
+    update_interval: ${ct_update_time}
+    filters:
+      - calibrate_linear:
+          - ${intoZero} -> 0
+          # - ${logs900w} -> ${known900w}
+          - ${logs2300w} -> ${known2300w}
+          # - ${logs3300w} -> ${known3300w}
+      # filter less than 230W, equates no power throughput
+      - lambda: |-
+          if (x > 1) return x;
+          else return 0;
+  
+# Channel 4: House        
+  - platform: ct_clamp
+    sensor: adc_sensor
+    name: ct4Amps, house
+    id: ct4Amps
+    unit_of_measurement: A
+    accuracy_decimals: 5
+    sample_duration: 200ms
+    update_interval: ${ct_update_time}
+    filters:
+      - calibrate_linear:
+          - ${intoZero} -> 0
+          - ${logs125w} -> ${known125w}
+          - ${logs900w} -> ${known900w}
+          - ${logs2300w} -> ${known2300w}
+          - ${logs3300w} -> ${known3300w}
+          - ${logs6000w} -> ${known6000w}
+      # filter nagative
+      - lambda: |-
+          if (x > 0) return x;
+          else return 0;
+
+# Watts 
+# Solar
+  - platform: template
+    name: ${device_name} Solar watts
+    id: ct1Watts
+    lambda: return id(ct1Amps).state * ${solarVolts};
+    accuracy_decimals: 0
+    unit_of_measurement: W
+    icon: "mdi:flash-circle"
+    update_interval: ${ct_update_time}
+# EV
+  - platform: template
+    name: ${device_name} EV watts
+    id: ct2Watts
+    lambda: return id(ct2Amps).state * ${ic1Volts};
+    accuracy_decimals: 0
+    unit_of_measurement: W
+    icon: "mdi:flash-circle"
+    update_interval: ${ct_update_time}
+# Dryer
+  - platform: template
+    name: ${device_name} Dryer watts
+    id: ct3Watts
+    lambda: return id(ct3Amps).state * ${ic1Volts};
+    accuracy_decimals: 0
+    unit_of_measurement: W
+    icon: "mdi:flash-circle"
+    update_interval: ${ct_update_time}
+# House
+  - platform: template
+    name: ${device_name} House watts
+    id: ct4Watts
+    lambda: return id(ct4Amps).state * ${ic1Volts};
+    accuracy_decimals: 0
+    unit_of_measurement: W
+    icon: "mdi:flash-circle"
+    update_interval: ${ct_update_time}
+
+# kWh
+# Solar
+  - platform: total_daily_energy
+    name: ${device_name} Daily Solar kWh
+    power_id: ct1Watts
+    filters:
+      - multiply: 0.001
+    unit_of_measurement: kWh
+    
+# EV
+  - platform: total_daily_energy
+    name: ${device_name} Daily EV kWh
+    power_id: ct2Watts
+    filters:
+      - multiply: 0.001
+    unit_of_measurement: kWh
+
+# Dryer
+  - platform: total_daily_energy
+    name: ${device_name} Daily Dryer kWh
+    power_id: ct3Watts
+    filters:
+      - multiply: 0.001
+    unit_of_measurement: kWh
+
+# House
+  - platform: total_daily_energy
+    name: ${device_name} Daily Net kWh
+    power_id: ct4Watts
+    filters:
+      - multiply: 0.001
+    unit_of_measurement: kWh
