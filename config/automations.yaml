@@ -9,8 +9,8 @@
     domain: binary_sensor
   condition:
   - condition: template
-    value_template: '{{ as_timestamp(now()) - as_timestamp(states.automation.someone_at_the_door.attributes.last_triggered)
-      | int > 2*60 }}'
+    value_template: '{{ as_timestamp(now()) - as_timestamp(states.automation.someone_at_the_door.attributes.last_triggered,
+      0) | int > 2*60 }}'
   action:
   - service: notify.mobile_app_GrayS10
     data:
@@ -24,17 +24,21 @@
       message: Someone at the door {{ as_timestamp(now()) | timestamp_custom('%H:%M')
         }}
       title: Doorbell
-  - service: media_player.volume_set
-    target:
-      entity_id: media_player.house
-    data:
-      volume_level: 0.7
   - service: media_player.play_media
     target:
       entity_id: media_player.house
     data:
-      media_content_type: music
-      media_content_id: media-source://media_source/Doorbell.mp3
+      media_content_id: media-source://media_source/local/Doorbell.m4a
+      media_content_type: audio/mp4
+    metadata:
+      title: Doorbell.m4a
+      thumbnail:
+      media_class: music
+      children_media_class:
+      navigateIds:
+      - {}
+      - media_content_type: app
+        media_content_id: media-source://media_source
   mode: single
 - id: '1622036751338'
   alias: Sonoff off
@@ -47,8 +51,8 @@
     domain: binary_sensor
   condition:
   - condition: template
-    value_template: '{{ as_timestamp(now()) - as_timestamp(states.automation.sonoff_off.attributes.last_triggered)
-      | int > (15*60) }}'
+    value_template: '{{ as_timestamp(now()) - as_timestamp(states.automation.sonoff_off.attributes.last_triggered,
+      0) | int > (15*60) }}'
   action:
   - service: notify.hotmail
     data:
@@ -66,8 +70,9 @@
     domain: binary_sensor
   condition:
   - condition: template
-    value_template: '{{ as_timestamp(states.automation.sonoff_off.attributes.last_triggered)
-      > as_timestamp(states.automation.sonoff_on.attributes.last_triggered) }}'
+    value_template: '{{ as_timestamp(states.automation.sonoff_off.attributes.last_triggered,
+      0) > as_timestamp(states.automation.sonoff_on.attributes.last_triggered, 0)
+      }}'
   action:
   - service: notify.hotmail
     data:
@@ -90,18 +95,20 @@
       milliseconds: 0
   condition:
   - condition: template
-    value_template: '{{ as_timestamp(now()) - as_timestamp(states.automation.power_tripped.attributes.last_triggered)
-      | int > (5*60*60) }}'
+    value_template: '{{ as_timestamp(now()) - as_timestamp(states.automation.power_tripped.attributes.last_triggered,
+      0) | int > (5*60*60) }}'
   action:
   - service: notify.mobile_app_grays10
     data:
-      message: Power tripped at {{ (as_timestamp(now()) - 3*60*60) | timestamp_custom('%H:%M')
+      message: Power tripped at {{ (as_timestamp(now()) - hours*60*60) | timestamp_custom('%H:%M')
         }}
   - service: notify.hotmail
     data:
-      message: Power tripped at {{ (as_timestamp(now()) - 3*60*60) | timestamp_custom('%H:%M')
+      message: Power tripped at {{ (as_timestamp(now()) - hours*60*60) | timestamp_custom('%H:%M')
         }}
       title: Power tripped
+  variables:
+    hours: 3
   mode: single
 - id: '1627304083229'
   alias: Thermostat off
@@ -141,11 +148,6 @@
     data:
       message: Thermostat heat at {{ as_timestamp(now()) | timestamp_custom('%H:%M')
         }}
-  - service: notify.gmail
-    data:
-      message: Thermostat heat at {{ as_timestamp(now()) | timestamp_custom('%H:%M')
-        }}
-      title: Thermostat heat
   mode: single
 - id: '1630512391225'
   alias: Blinds Open (AM)
@@ -155,8 +157,8 @@
     event: sunrise
   condition:
   - condition: template
-    value_template: '{{ as_timestamp(now()) - as_timestamp(states.automation.blinds_open_sunny.attributes.last_triggered)
-      | int > (12*60*60) }}'
+    value_template: '{{ as_timestamp(now()) - as_timestamp(states.automation.blinds_open_sunny.attributes.last_triggered,
+      0) | int > (12*60*60) }}'
   - condition: state
     entity_id: climate.nest_thermometer
     state: 'off'
@@ -170,32 +172,29 @@
     conditions:
     - condition: template
       value_template: '{{ state_attr(''weather.huis_hourly'', ''forecast'')[:8] |
-        map(attribute=''temperature'') | list | max >= 15 }}'
+        map(attribute=''temperature'') | list | max >= temp }}'
     - condition: and
       conditions:
       - condition: template
         value_template: '{{ state_attr(''weather.huis_hourly'', ''forecast'')[:8]
-          | map(attribute=''temperature'') | list | max < 15 }}'
+          | map(attribute=''temperature'') | list | max < temp }}'
       - condition: template
         value_template: '"{{ state_attr(''weather.huis_hourly'', ''forecast'')[:8]
           | selectattr(''condition'', ''in'', [''sunny'', ''partlycloudy'']) | list
           | count > 0 }}"'
   action:
-  - service: notify.mobile_app_grays10
-    data:
-      message: "Blinds Open (AM), {{ state_attr('weather.huis_hourly', 'forecast')[:8]\
-        \ |\n  map(attribute='temperature') | list | max }}, {{\nstate_attr('weather.huis_hourly',\
-        \ 'forecast')[:8] | list |\nmap(attribute='condition') | unique | list }}"
-  - service: notify.hotmail
-    data:
-      message: Blinds Open (AM), {{ state_attr('weather.huis_hourly', 'forecast')[:8]
-        | map(attribute='temperature') | list | max }}, {{ state_attr('weather.huis_hourly',
-        'forecast')[:8] | list | map(attribute='condition') | unique | list }}
-      title: Blinds Open (AM)
   - device_id: 7171a7316f4a8d109003d570def12f26
     domain: cover
     entity_id: cover.somfy_cover
     type: open
+  - service: notify.mobile_app_grays10
+    data:
+      message: Blinds Open (AM), {{ state_attr('weather.huis_hourly', 'forecast')[:8]
+        | map(attribute='temperature') | list | max }}, {{ state_attr('weather.huis_hourly',
+        'forecast')[:8] | list | map(attribute='condition') | unique | list }} at
+        {{ as_timestamp(now()) | timestamp_custom('%H:%M') }}
+  variables:
+    temp: 15
   mode: single
 - id: '1630673076060'
   alias: Blinds Close (Cold)
@@ -204,18 +203,39 @@
   - platform: sun
     event: sunset
     id: sunset
+    offset: -01:00:00
   - platform: numeric_state
     entity_id: climate.nest_thermometer
     attribute: current_temperature
-    below: '20'
+    below: '22'
+  - platform: template
+    value_template: '{{ states(''weather.huis'') != ''sunny'' }}
+
+      '
+  - platform: template
+    value_template: '{{ state_attr(''weather.huis_hourly'', ''forecast'')[0].temperature
+      < 5 }}
+
+      '
+  - platform: time_pattern
+    minutes: '1'
   condition:
   - condition: template
-    value_template: '{{ as_timestamp(now()) - as_timestamp(states.automation.blinds_close_cold.attributes.last_triggered)
-      | int > (3*60*60) }}'
-  - condition: sun
-    before: sunrise
-    after: sunset
-    before_offset: '24:00:00'
+    value_template: '{{ as_timestamp(now()) - last_triggered | int > (2*60*60) }}'
+  - condition: template
+    value_template: '{{ as_timestamp(now()) - as_timestamp(states.automation.blinds_open_sunny.attributes.last_triggered,
+      0) | int > (60*60) }}'
+  - condition: or
+    conditions:
+    - condition: sun
+      before: sunrise
+      after: sunset
+      before_offset: '24:00:00'
+      after_offset: '-1:00:00'
+    - condition: template
+      value_template: '{{ state_attr(''weather.huis_hourly'', ''forecast'')[:2] |
+        selectattr(''condition'', ''in'', [''sunny'', ''partlycloudy'']) | list |
+        count == 0 }}'
   - condition: or
     conditions:
     - type: is_temperature
@@ -223,30 +243,44 @@
       device_id: b19694817d3e24bb0e046ae4cb59061d
       entity_id: sensor.nest_thermometer_temperature
       domain: sensor
-      below: 20
+      below: 22
     - condition: state
       entity_id: climate.nest_thermometer
       attribute: hvac_action
       state: heating
     - condition: template
       value_template: '{{ state_attr(''weather.huis_hourly'', ''forecast'')[:2] |
-        map(attribute=''temperature'') | list | min < 15 }}'
+        map(attribute=''temperature'') | list | min < 10 }}'
   action:
-  - service: notify.mobile_app_grays10
-    data:
-      message: "Blinds Close (Cold), thermometer {{ state_attr('climate.nest_thermometer',\
-        \ 'current_temperature') }}, forecast {{ state_attr('weather.huis_hourly',\
-        \ 'forecast')[:2] |\n  map(attribute='temperature') | list | min }}"
-  - service: notify.hotmail
-    data:
-      message: Blinds Close (Cold), thermometer {{ state_attr('climate.nest_thermometer',
-        'current_temperature') }}, forecast {{ state_attr('weather.huis_hourly', 'forecast')[:2]
-        | map(attribute='temperature') | list | min }}
-      title: Blinds Close (Cold)
   - device_id: 7171a7316f4a8d109003d570def12f26
     domain: cover
     entity_id: cover.somfy_cover
     type: close
+  - condition: or
+    conditions:
+    - condition: template
+      value_template: '{{ new_day }}'
+    - condition: template
+      value_template: '{{ last_triggered < as_timestamp(states.automation.blinds_open_sunny.attributes.last_triggered,
+        0) }}'
+    - condition: template
+      value_template: '{{ last_triggered < as_timestamp(states.automation.blinds_open_am.attributes.last_triggered,
+        0) }}'
+    - condition: template
+      value_template: '{{ last_triggered < as_timestamp(states.automation.blinds_open_hot.attributes.last_triggered,
+        0) }}'
+  - service: notify.mobile_app_grays10
+    data:
+      message: "Blinds Close (Cold), thermometer {{ state_attr('climate.nest_thermometer',\
+        \ 'current_temperature') }}, forecast {{ state_attr('weather.huis_hourly',\
+        \ 'forecast')[:2] |\n  map(attribute='temperature') | list | min }}, {{ state_attr('weather.huis_hourly',\n\
+        'forecast')[:2] | map(attribute='condition') | list }} at {{ as_timestamp(now())\
+        \ | timestamp_custom('%H:%M') }}"
+  variables:
+    last_triggered: '{{ as_timestamp(states.automation.blinds_close_cold.attributes.last_triggered,
+      0) }}'
+    new_day: '{{ as_datetime(last_triggered).day != now().day and now() > today_at(''06:00'')
+      }}'
   mode: single
 - id: '1631017824414'
   alias: Blinds Open (Hot)
@@ -267,24 +301,19 @@
     state: 'off'
     attribute: hvac_action
     for:
-      hours: 0
+      hours: 3
       minutes: 0
       seconds: 0
       milliseconds: 0
   action:
-  - service: notify.mobile_app_grays10
-    data:
-      message: Blinds Open (Hot), {{ state_attr('climate.nest_thermometer', 'current_temperature')
-        }}
-  - service: notify.hotmail
-    data:
-      message: Blinds Open (Hot), {{ state_attr('climate.nest_thermometer', 'current_temperature')
-        }}
-      title: Blinds Open (Hot)
   - device_id: 7171a7316f4a8d109003d570def12f26
     domain: cover
     entity_id: cover.somfy_cover
     type: open
+  - service: notify.mobile_app_grays10
+    data:
+      message: Blinds Open (Hot), {{ state_attr('climate.nest_thermometer', 'current_temperature')
+        }} at {{ as_timestamp(now()) | timestamp_custom('%H:%M') }}
   mode: single
 - id: '1631786801519'
   alias: Weather forecast
@@ -304,50 +333,34 @@
   alias: Blinds Close (Forecast Hot Sun)
   description: Close the blinds when the forecast says it is going to be hot
   trigger:
-  - platform: time_pattern
-    minutes: '1'
+  - platform: template
+    value_template: '{{ state_attr(''weather.huis_hourly'', ''forecast'')[3:7] | selectattr(''condition'',
+      ''in'', [''sunny'', ''partlycloudy'']) | list | count > 0 }}
+
+      '
   condition:
   - condition: template
-    value_template: '{{ as_timestamp(now()) - as_timestamp(states.automation.blinds_close_forecast_hot_sun.attributes.last_triggered)
-      | int > (12*60*60) }}'
+    value_template: '{{ as_timestamp(now()) - as_timestamp(states.automation.blinds_close_forecast_hot_sun.attributes.last_triggered,
+      0) | int > (12*60*60) }}'
   - condition: sun
     before: sunset
     before_offset: -06:00:00
     after: sunrise
-  - condition: or
-    conditions:
-    - condition: template
-      value_template: '{{ state_attr(''weather.huis_hourly'', ''forecast'')[:7] |
-        map(attribute=''temperature'') | list | max > 23 }}'
-    - condition: and
-      conditions:
-      - condition: template
-        value_template: '{{ state_attr(''weather.huis_hourly'', ''forecast'')[:7]
-          | map(attribute=''temperature'') | list | max > 20 }}'
-      - condition: or
-        conditions:
-        - condition: template
-          value_template: '{{ state_attr(''weather.huis_hourly'', ''forecast'')[3:7]
-            | selectattr(''condition'', ''in'', [''sunny'', ''partlycloudy'']) | list
-            | count > 0 }}'
+  - condition: template
+    value_template: '{{ state_attr(''weather.huis_hourly'', ''forecast'')[:7] | map(attribute=''temperature'')
+      | list | max > 20 }}'
   action:
+  - device_id: 7171a7316f4a8d109003d570def12f26
+    domain: cover
+    entity_id: cover.somfy_cover
+    type: close
   - service: notify.mobile_app_grays10
     data:
       message: Blinds Close (Forecast Hot Sun), {{ state_attr('weather.huis_hourly',
         'forecast')[:7] | map(attribute='temperature') | list | max }},  {{ state_attr('weather.huis_hourly',
         'forecast')[3:7] | selectattr('condition', 'in', ['sunny', 'partlycloudy'])
-        | list | map(attribute='condition') | unique | list }}
-  - service: notify.hotmail
-    data:
-      message: Blinds Close (Forecast Hot Sun), {{ state_attr('weather.huis_hourly',
-        'forecast')[:7] | map(attribute='temperature') | list | max }},  {{ state_attr('weather.huis_hourly',
-        'forecast')[3:7] | selectattr('condition', 'in', ['sunny', 'partlycloudy'])
-        | list | map(attribute='condition') | unique | list }}
-      title: Blinds Close (Forecast Hot Sun)
-  - device_id: 7171a7316f4a8d109003d570def12f26
-    domain: cover
-    entity_id: cover.somfy_cover
-    type: close
+        | list | map(attribute='condition') | unique | list }} at {{ as_timestamp(now())
+        | timestamp_custom('%H:%M') }}
   mode: single
 - id: '1632210788661'
   alias: Blinds Close (Forecast Hot)
@@ -380,23 +393,17 @@
           | selectattr(''condition'', ''in'', [''sunny'', ''partlycloudy'']) | list
           | count > 0 }}"'
   action:
+  - device_id: 7171a7316f4a8d109003d570def12f26
+    domain: cover
+    entity_id: cover.somfy_cover
+    type: close
   - service: notify.mobile_app_grays10
     data:
       message: Blinds Close (Forecast Hot), {{ state_attr('weather.huis_hourly', 'forecast')[:8]
         | map(attribute='temperature') | list | max }},  {{ state_attr('weather.huis_hourly',
         'forecast')[3:7] | selectattr('condition', 'in', ['sunny', 'partlycloudy'])
-        | list | map(attribute='condition') | unique | list }}
-  - service: notify.hotmail
-    data:
-      message: Blinds Close (Forecast Hot), {{ state_attr('weather.huis_hourly', 'forecast')[:8]
-        | map(attribute='temperature') | list | max }},  {{ state_attr('weather.huis_hourly',
-        'forecast')[3:7] | selectattr('condition', 'in', ['sunny', 'partlycloudy'])
-        | list | map(attribute='condition') | unique | list }}
-      title: Blinds Close (Forecast Hot)
-  - device_id: 7171a7316f4a8d109003d570def12f26
-    domain: cover
-    entity_id: cover.somfy_cover
-    type: close
+        | list | map(attribute='condition') | unique | list }} at {{ as_timestamp(now())
+        | timestamp_custom('%H:%M') }}
   mode: single
 - id: '1632491139519'
   alias: Blinds Close (Hot)
@@ -427,41 +434,48 @@
     value_template: '{{ state_attr(''weather.huis_hourly'', ''forecast'')[:5] | map(attribute=''temperature'')
       | list | max > 19 }}'
   action:
+  - device_id: 7171a7316f4a8d109003d570def12f26
+    domain: cover
+    entity_id: cover.somfy_cover
+    type: close
   - service: notify.mobile_app_grays10
     data:
       message: Blinds Close (Hot), thermometer {{ state_attr('climate.nest_thermometer','current_temperature')
         }},  forecast {{ state_attr('weather.huis_hourly', 'forecast')[:5] | map(attribute='temperature')
         | list | max }}, {{ state_attr('weather.huis_hourly', 'forecast')[:5] | map(attribute='condition')
-        | unique | list }}
-  - service: notify.hotmail
-    data:
-      message: Blinds Close (Hot), thermometer {{ state_attr('climate.nest_thermometer','current_temperature')
-        }}, forecast {{ state_attr('weather.huis_hourly', 'forecast')[:5] | map(attribute='temperature')
-        | list | max }}, {{ state_attr('weather.huis_hourly', 'forecast')[:5] | map(attribute='condition')
-        | unique | list }}
-      title: Blinds Close (Hot)
-  - device_id: 7171a7316f4a8d109003d570def12f26
-    domain: cover
-    entity_id: cover.somfy_cover
-    type: close
+        | unique | list }} at {{ as_timestamp(now()) | timestamp_custom('%H:%M') }}
   mode: single
 - id: '1632995350298'
   alias: Blinds Open (Sunny)
   description: Open the blinds when it is cold but sunny
   trigger:
+  - platform: sun
+    event: sunrise
+    offset: 02:00:00
+  - platform: template
+    value_template: '{{ states(''weather.huis'') == ''sunny'' or states(''weather.huis'')
+      == ''partlycloudy'' }}
+
+      '
   - platform: time_pattern
     minutes: '1'
   condition:
   - condition: template
-    value_template: '{{ as_timestamp(now()) - as_timestamp(states.automation.blinds_open_sunny.attributes.last_triggered)
-      | int > (12*60*60) }}'
+    value_template: '{{ as_timestamp(now()) - last_triggered | int > (2*60*60) }}'
   - condition: template
-    value_template: '{{ as_timestamp(now()) - as_timestamp(states.automation.blinds_open_am.attributes.last_triggered)
-      | int > (12*60*60) }}'
+    value_template: '{{ as_timestamp(now()) - as_timestamp(states.automation.blinds_close_cold.attributes.last_triggered,
+      0) | int > (60*60) }}'
+  - condition: template
+    value_template: '{{ as_timestamp(now()) - as_timestamp(states.automation.blinds_open_am.attributes.last_triggered,
+      0) | int > (12*60*60) }}'
   - condition: sun
     before: sunset
-    before_offset: -02:00:00
+    before_offset: -03:00:00
     after: sunrise
+    after_offset: 02:00:00
+  - condition: template
+    value_template: '{{ (now().month < 4 and now().month > 9) or now() > today_at(''09:00'')
+      }}'
   - condition: template
     value_template: '{{ state_attr(''weather.huis_hourly'', ''forecast'')[0].temperature
       < 19 }}'
@@ -475,24 +489,37 @@
       - condition: template
         value_template: '{{ state_attr(''weather.huis_hourly'', ''forecast'')[0].condition
           == ''partlycloudy'' }}'
-      - condition: template
-        value_template: '{{ now().month >= 3 and now().month <= 10 }}'
+      - condition: or
+        conditions:
+        - condition: template
+          value_template: '{{ now().month >= 3 and now().month <= 10 }}'
+        - condition: template
+          value_template: '{{ state_attr(''weather.huis_hourly'', ''forecast'')[1].condition
+            == ''sunny'' }}'
   action:
-  - service: notify.mobile_app_grays10
-    data:
-      message: Blinds Open (Sunny), {{ state_attr('weather.huis_hourly', 'forecast')[0].temperature
-        }}, {{ state_attr('weather.huis_hourly', 'forecast')[:3] | map(attribute='condition')
-        | list }}
-  - service: notify.hotmail
-    data:
-      message: Blinds Open (Sunny), {{ state_attr('weather.huis_hourly', 'forecast')[0].temperature
-        }}, {{ state_attr('weather.huis_hourly', 'forecast')[:3] | map(attribute='condition')
-        | list }}
-      title: Blinds Open (Sunny)
   - device_id: 7171a7316f4a8d109003d570def12f26
     domain: cover
     entity_id: cover.somfy_cover
     type: open
+  - condition: or
+    conditions:
+    - condition: template
+      value_template: '{{ new_day }}'
+    - condition: template
+      value_template: '{{ last_triggered < as_timestamp(states.automation.blinds_close_cold.attributes.last_triggered,
+        0) }}'
+    - condition: template
+      value_template: '{{ last_triggered < as_timestamp(states.automation.blinds_close_forecast_hot_sun.last_triggered,
+        0) }}'
+  - service: notify.mobile_app_grays10
+    data:
+      message: Blinds Open (Sunny), {{ state_attr('weather.huis_hourly', 'forecast')[0].temperature
+        }}, {{ state_attr('weather.huis_hourly', 'forecast')[:3] | map(attribute='condition')
+        | list }} at {{ as_timestamp(now()) | timestamp_custom('%H:%M') }}
+  variables:
+    last_triggered: '{{ as_timestamp(states.automation.blinds_open_sunny.attributes.last_triggered,
+      0) }}'
+    new_day: '{{ as_datetime(last_triggered).day != now().day }}'
   mode: single
 - id: '1634035203091'
   alias: Heating
@@ -504,13 +531,14 @@
     id: heating_action
   condition:
   - condition: template
-    value_template: '{{ now().month >= 3 and now().month <= 10 }}'
+    value_template: '{{ now().month >= 4 and now().month <= 10 }}'
   action:
   - service: notify.mobile_app_grays10
     data:
       message: Heating ({{ state_attr('climate.nest_thermometer','hvac_action') }}),
         Current {{ state_attr('climate.nest_thermometer','current_temperature') }},
-        Target {{ state_attr('climate.nest_thermometer','temperature') }}
+        Target {{ state_attr('climate.nest_thermometer','temperature') }} at {{ as_timestamp(now())
+        | timestamp_custom('%H:%M') }}
   mode: single
 - id: '1636735120825'
   alias: Heating (log)
@@ -526,28 +554,24 @@
     data:
       message: '{{ state_attr(''climate.nest_thermometer'',''hvac_action'') }}, Current
         {{ state_attr(''climate.nest_thermometer'',''current_temperature'') }}, Target
-        {{ state_attr(''climate.nest_thermometer'',''temperature'') }}'
+        {{ state_attr(''climate.nest_thermometer'',''temperature'') }} at {{ as_timestamp(now())
+        | timestamp_custom(''%H:%M'') }}'
       title: Heating ({{ state_attr('climate.nest_thermometer','hvac_action') }})
   mode: single
 - id: '1636991770084'
   alias: Heating Up
-  description: Notify if heating is set above 21
+  description: Notify if heating is set above 23
   trigger:
   - platform: template
     value_template: '{{state_attr(''climate.nest_thermometer'', ''temperature'') >=
-      21}}'
+      23}}'
   condition: []
   action:
   - service: notify.mobile_app_grays10
     data:
       message: Heating Up ({{ state_attr('climate.nest_thermometer','temperature')
         }}), current {{ state_attr('climate.nest_thermometer','current_temperature')
-        }}
-  - service: notify.hotmail
-    data:
-      message: Target {{ state_attr('climate.nest_thermometer','temperature') }},
-        current {{ state_attr('climate.nest_thermometer','current_temperature') }}
-      title: Heating Up
+        }} at {{ as_timestamp(now()) | timestamp_custom('%H:%M') }}
   mode: single
 - id: '1637413245698'
   alias: Power on
@@ -565,8 +589,8 @@
       milliseconds: 0
   condition:
   - condition: template
-    value_template: '{{ as_timestamp(states.automation.power_tripped.attributes.last_triggered)
-      > as_timestamp(states.automation.power_on.attributes.last_triggered) }}'
+    value_template: '{{ as_timestamp(states.automation.power_tripped.attributes.last_triggered,
+      0) > as_timestamp(states.automation.power_on.attributes.last_triggered, 0) }}'
   action:
   - service: notify.mobile_app_grays10
     data:
@@ -592,8 +616,8 @@
       milliseconds: 0
   condition:
   - condition: template
-    value_template: '{{ as_timestamp(now()) - as_timestamp(states.automation.emon_off.attributes.last_triggered)
-      | int > (30*60) }}'
+    value_template: '{{ as_timestamp(now()) - as_timestamp(states.automation.emon_off.attributes.last_triggered,
+      0) | int > (30*60) }}'
   action:
   - service: notify.hotmail
     data:
@@ -612,8 +636,8 @@
     domain: binary_sensor
   condition:
   - condition: template
-    value_template: '{{ as_timestamp(states.automation.emon_off.attributes.last_triggered)
-      > as_timestamp(states.automation.emon_on.attributes.last_triggered) }}'
+    value_template: '{{ as_timestamp(states.automation.emon_off.attributes.last_triggered,
+      0) > as_timestamp(states.automation.emon_on.attributes.last_triggered, 0) }}'
   action:
   - service: notify.hotmail
     data:
@@ -637,23 +661,20 @@
       milliseconds: 0
   condition:
   - condition: template
-    value_template: '{{ as_timestamp(states.automation.emon_dryer_start.attributes.last_triggered)
-      > as_timestamp(states.automation.emon_dryer_done.attributes.last_triggered)
-      }}'
+    value_template: '{{ as_timestamp(states.automation.emon_dryer_start.attributes.last_triggered,
+      0) > as_timestamp(states.automation.emon_dryer_done.attributes.last_triggered,
+      0) }}'
   action:
   - service: notify.mobile_app_susans10
     data:
-      message: Dryer finished at {{ (as_timestamp(now()) - 10*60) | timestamp_custom('%H:%M')
+      message: Dryer finished at {{ (as_timestamp(now()) - mins*60) | timestamp_custom('%H:%M')
         }}
   - service: notify.mobile_app_grays10
     data:
-      message: emon Dryer finished at {{ (as_timestamp(now()) - 10*60) | timestamp_custom('%H:%M')
+      message: emon Dryer finished at {{ (as_timestamp(now()) - mins*60) | timestamp_custom('%H:%M')
         }}
-  - service: notify.hotmail
-    data:
-      message: emon Dryer finished at {{ (as_timestamp(now()) - 10*60) | timestamp_custom('%H:%M')
-        }}
-      title: emon Dryer done
+  variables:
+    mins: 10
   mode: single
 - id: '1637851106641'
   alias: emon EV Charge
@@ -672,21 +693,16 @@
     above: 500
   condition:
   - condition: template
-    value_template: '{{ as_timestamp(now()) - as_timestamp(states.automation.emon_on.attributes.last_triggered)
-      | int > (2*60) }}'
+    value_template: '{{ as_timestamp(now()) - as_timestamp(states.automation.emon_on.attributes.last_triggered,
+      0) | int > (2*60) }}'
   - condition: template
-    value_template: '{{ as_timestamp(now()) - as_timestamp(states.automation.emon_ev_charge.attributes.last_triggered)
-      | int > (2*60*60) }}'
+    value_template: '{{ as_timestamp(now()) - as_timestamp(states.automation.emon_ev_charge.attributes.last_triggered,
+      0) | int > (2*60*60) }}'
   action:
   - service: notify.mobile_app_grays10
     data:
       message: emon EV started at {{ (as_timestamp(now()) - 60) | timestamp_custom('%H:%M')
         }}
-  - service: notify.hotmail
-    data:
-      message: emon EV started at {{ (as_timestamp(now()) - 60) | timestamp_custom('%H:%M')
-        }}
-      title: emon EV started
   mode: single
 - id: '1637851283396'
   alias: emon EV Done
@@ -705,18 +721,16 @@
       milliseconds: 0
   condition:
   - condition: template
-    value_template: '{{ as_timestamp(states.automation.emon_ev_charge.attributes.last_triggered)
-      > as_timestamp(states.automation.emon_ev_done.attributes.last_triggered) }}'
+    value_template: '{{ as_timestamp(states.automation.emon_ev_charge.attributes.last_triggered,
+      0) > as_timestamp(states.automation.emon_ev_done.attributes.last_triggered,
+      0) }}'
   action:
   - service: notify.mobile_app_grays10
     data:
-      message: emon EV finished at {{ (as_timestamp(now()) - 10*60) | timestamp_custom('%H:%M')
+      message: emon EV finished at {{ (as_timestamp(now()) - mins*60) | timestamp_custom('%H:%M')
         }}
-  - service: notify.hotmail
-    data:
-      message: emon EV finished at {{ (as_timestamp(now()) - 10*60) | timestamp_custom('%H:%M')
-        }}
-      title: emon EV done
+  variables:
+    mins: 10
   mode: single
 - id: '1637917756279'
   alias: emon Dryer start
@@ -735,21 +749,16 @@
     above: 500
   condition:
   - condition: template
-    value_template: '{{ as_timestamp(now()) - as_timestamp(states.automation.emon_on.attributes.last_triggered)
-      | int > (2*60) }}'
+    value_template: '{{ as_timestamp(now()) - as_timestamp(states.automation.emon_on.attributes.last_triggered,
+      0) | int > (2*60) }}'
   - condition: template
-    value_template: '{{ as_timestamp(now()) - as_timestamp(states.automation.emon_dryer_start.attributes.last_triggered)
-      | int > (2*60*60) }}'
+    value_template: '{{ as_timestamp(now()) - as_timestamp(states.automation.emon_dryer_start.attributes.last_triggered,
+      0) | int > (60*60) }}'
   action:
   - service: notify.mobile_app_grays10
     data:
       message: emon Dryer started at {{ (as_timestamp(now()) - 60) | timestamp_custom('%H:%M')
         }}
-  - service: notify.hotmail
-    data:
-      message: emon Dryer started at {{ (as_timestamp(now()) - 60) | timestamp_custom('%H:%M')
-        }}
-      title: emon Dryer started
   mode: single
 - id: '1639048082699'
   alias: emon running
@@ -762,8 +771,9 @@
     domain: binary_sensor
   condition:
   - condition: template
-    value_template: '{{ as_timestamp(states.automation.emon_down.attributes.last_triggered)
-      > as_timestamp(states.automation.emon_running.attributes.last_triggered) }}'
+    value_template: '{{ as_timestamp(states.automation.emon_down.attributes.last_triggered,
+      0) > as_timestamp(states.automation.emon_running.attributes.last_triggered,
+      0) }}'
   action:
   - service: notify.mobile_app_grays10
     data:
@@ -791,16 +801,75 @@
       milliseconds: 0
   condition:
   - condition: template
-    value_template: '{{ as_timestamp(now()) - as_timestamp(states.automation.emon_down.attributes.last_triggered)
-      | int > (30*60) }}'
+    value_template: '{{ as_timestamp(now()) - as_timestamp(states.automation.emon_down.attributes.last_triggered,
+      0) | int > (2*60*60) }}'
   action:
   - service: notify.mobile_app_grays10
     data:
-      message: emon down at {{ (as_timestamp(now()) - 15*60) | timestamp_custom('%H:%M')
+      message: emon down at {{ (as_timestamp(now()) - mins*60) | timestamp_custom('%H:%M')
         }}
   - service: notify.hotmail
     data:
-      message: emon down at {{ (as_timestamp(now()) - 15*60) | timestamp_custom('%H:%M')
+      message: emon down at {{ (as_timestamp(now()) - mins*60) | timestamp_custom('%H:%M')
         }}
       title: emon down
+  variables:
+    mins: 15
+  mode: single
+- id: '1643465768857'
+  alias: emon Washing start
+  description: Norify when washing starts
+  trigger:
+  - type: power
+    platform: device
+    device_id: 83972884d27fd61f8a582922acd63d77
+    entity_id: sensor.athom_smart_plug_power
+    domain: sensor
+    above: 500
+    for:
+      hours: 0
+      minutes: 1
+      seconds: 0
+  condition:
+  - condition: template
+    value_template: '
+
+      {{ as_timestamp(now()) - as_timestamp(states.automation.emon_washing_start.attributes.last_triggered,
+      0) | int > (60*60) }}'
+  action:
+  - service: notify.mobile_app_grays10
+    data:
+      message: emon Washing started at {{ (as_timestamp(now()) - 60) | timestamp_custom('%H:%M')
+        }}
+  mode: single
+- id: '1643465875392'
+  alias: emon Washing done
+  description: When washing stops using power for 10 mins, notify done
+  trigger:
+  - type: power
+    platform: device
+    device_id: 83972884d27fd61f8a582922acd63d77
+    entity_id: sensor.athom_smart_plug_power
+    domain: sensor
+    below: 20
+    for:
+      hours: 0
+      minutes: 10
+      seconds: 0
+  condition:
+  - condition: template
+    value_template: '{{ as_timestamp(states.automation.emon_washing_start.attributes.last_triggered,
+      0) > as_timestamp(states.automation.emon_washing_done.attributes.last_triggered,
+      0) }}'
+  action:
+  - service: notify.mobile_app_susans10
+    data:
+      message: Washing finished at {{ (as_timestamp(now()) - mins*60) | timestamp_custom('%H:%M')
+        }}
+  - service: notify.mobile_app_grays10
+    data:
+      message: emon Washing finished at {{ (as_timestamp(now()) - mins*60) | timestamp_custom('%H:%M')
+        }}
+  variables:
+    mins: 10
   mode: single
