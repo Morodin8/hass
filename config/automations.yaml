@@ -279,7 +279,7 @@
   variables:
     last_triggered: '{{ as_timestamp(states.automation.blinds_close_cold.attributes.last_triggered,
       0) }}'
-    new_day: '{{ as_datetime(last_triggered).day != now().day and now() > today_at(''06:00'')
+    new_day: '{{ as_datetime(last_triggered).day != now().day and now() > today_at(''09:02'')
       }}'
   mode: single
 - id: '1631017824414'
@@ -295,7 +295,7 @@
     device_id: b19694817d3e24bb0e046ae4cb59061d
     entity_id: sensor.nest_thermometer_temperature
     domain: sensor
-    above: 22
+    above: 23
   - condition: state
     entity_id: climate.nest_thermometer
     state: 'off'
@@ -474,7 +474,8 @@
     after: sunrise
     after_offset: 02:00:00
   - condition: template
-    value_template: '{{ (now().month < 4 and now().month > 9) or now() > today_at(''09:00'')
+    value_template: '{{ (now().month <= spring and now().month >= autumn) or ((now().weekday()
+      != 6 and now() > today_at(''09:00'')) or (now().weekday() == 6 and now() > today_at(''10:00'')))
       }}'
   - condition: template
     value_template: '{{ state_attr(''weather.huis_hourly'', ''forecast'')[0].temperature
@@ -492,7 +493,7 @@
       - condition: or
         conditions:
         - condition: template
-          value_template: '{{ now().month >= 3 and now().month <= 10 }}'
+          value_template: '{{ now().month >= spring and now().month <= autumn }}'
         - condition: template
           value_template: '{{ state_attr(''weather.huis_hourly'', ''forecast'')[1].condition
             == ''sunny'' }}'
@@ -520,6 +521,8 @@
     last_triggered: '{{ as_timestamp(states.automation.blinds_open_sunny.attributes.last_triggered,
       0) }}'
     new_day: '{{ as_datetime(last_triggered).day != now().day }}'
+    spring: 3
+    autumn: 9
   mode: single
 - id: '1634035203091'
   alias: Heating
