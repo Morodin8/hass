@@ -1,7 +1,7 @@
 substitutions:
-  pin_set_delay: 2s
-  component_update_delay: 500ms
-  update_time: 20s # must be > (pin_set_delay+component_update_delay*2) * channels
+  pin_set_delay: 1s
+  component_update_delay: 450ms
+  update_time: 8s # must be > (pin_set_delay+component_update_delay*2) * channels
   ct_update_time: never
   device_name: emon
   ic1Volts: '230'
@@ -12,15 +12,15 @@ substitutions:
   known125w: '0.544'
   known900w: '3.913'
   known2300w: '10.0'
-  known3300w: '14.348' # '15.65'
+  known3300w: '14.348'
   known6000w: '26.09'
   # value in logs
-  logs125w: '0.0085' # '0.005', '0.0035', 0.00134'
+  logs125w: '0.005' # '0.0085', '0.0035', 0.00134'
   logs900w: '0.009' # '0.006', 0.0055'
-  logs2300w: '0.0157' # '0.0158'
-  logs3300w: '0.025'
-  logs6000w: '0.048' # '0.047'
-
+  logs2300w: '0.0157' # '0.01'
+  logs3300w: '0.022' # '0.023', '0.025'
+  logs6000w: '0.045' # '0.047'
+  
 esphome:
   name: ${device_name}
   platform: ESP8266
@@ -32,8 +32,8 @@ wifi:
 
   # Enable fallback hotspot (captive portal) in case wifi connection fails
   ap:
-    ssid: !secret power_fallback_ssid
-    password: !secret power_fallback_password
+    ssid: !secret emon_fallback_ssid
+    password: !secret emon_fallback_password
 
 # Enable Home Assistant API
 api:
@@ -51,6 +51,7 @@ logger:
 
 captive_portal:
 
+# Time used for daily KWh usage  
 time:
   - platform: homeassistant
     id: homeassistant_time
@@ -106,7 +107,6 @@ script:
       - component.update: ct4Watts
       - delay: ${component_update_delay}
 
-
 binary_sensor:
   - platform: status
     name: ${device_name} Status
@@ -142,6 +142,33 @@ sensor:
     id: adc_sensor
 #    attenuation: 11db #esp32 only
 
+# smart plug
+# Washing
+  - platform: homeassistant
+    id: plug0Power
+    entity_id: sensor.athom_smart_plug_power
+    on_value:
+      then:
+        - sensor.template.publish:
+            id: washingWatts
+            state: !lambda 'return id(plug0Power).state;'
+# Current Volts
+  - platform: homeassistant
+    id: local_volts
+    entity_id: sensor.athom_smart_plug_voltage
+    # When plug updates, update Volts
+    on_value:
+      then:
+        - sensor.template.publish:
+            id: current_volts
+            state: !lambda 'if (isnan(id(local_volts).state)) return ${ic1Volts}; else return id(local_volts).state;'
+            #state: !lambda 'return ${ic1Volts};'
+            
+  - platform: template
+    id: current_volts
+    name: 'Current Voltage'
+    update_interval: ${ct_update_time}
+
 #Apms
 # Channel 1: Solar
   - platform: ct_clamp
@@ -149,66 +176,7 @@ sensor:
     name: ct1Amps, solar
     id: ct1Amps
     unit_of_measurement: A
-    accuracy_decimals: 5
-    sample_duration: 200ms
-    update_interval: ${ct_update_time}
-    filters:
-      - calibrate_linear:
-          - ${intoZero} -> 0
-          - ${logs125w} -> ${known125w}
-          - ${logs900w} -> ${known900w}
-          - ${logs2300w} -> ${known2300w}
-          - ${logs3300w} -> ${known3300w}
-          - ${logs6000w} -> ${known6000w}
-      # # filter nagative
-      # - lambda: |-
-      #     if (x > 0) return x;
-      #     else return 0;
-
-# Channel 2: EV
-  - platform: ct_clamp
-    sensor: adc_sensor
-    name: ct2Amps, EV
-    id: ct2Amps
-    unit_of_measurement: A
-    accuracy_decimals: 5
-    sample_duration: 200ms
-    update_interval: ${ct_update_time}
-    filters:
-      - calibrate_linear:
-          - ${intoZero} -> 0
-          - ${logs3300w} -> ${known3300w}
-      # filter less than 230W, equates no power throughput
-      - lambda: |-
-          if (x > 1) return x;
-          else return 0;
-  
-# Channel 3: Dryer
-  - platform: ct_clamp
-    sensor: adc_sensor
-    name: ct3Amps, dryer
-    id: ct3Amps
-    unit_of_measurement: A
-    accuracy_decimals: 5
-    sample_duration: 200ms
-    update_interval: ${ct_update_time}
-    filters:
-      - calibrate_linear:
-          - ${intoZero} -> 0
-          # - ${logs900w} -> ${known900w}
-          - ${logs2300w} -> ${known2300w}
-          # - ${logs3300w} -> ${known3300w}
-      # filter less than 230W, equates no power throughput
-      - lambda: |-
-          if (x > 1) return x;
-          else return 0;
-  
-# Channel 4: House        
-  - platform: ct_clamp
-    sensor: adc_sensor
-    name: ct4Amps, house
-    id: ct4Amps
-    unit_of_measurement: A
+    device_class: current
     accuracy_decimals: 5
     sample_duration: 200ms
     update_interval: ${ct_update_time}
@@ -224,44 +192,167 @@ sensor:
       - lambda: |-
           if (x > 0) return x;
           else return 0;
+    # When Current updates, update Watts
+    on_value:
+      then:
+        - sensor.template.publish:
+            id: ct1Watts
+            state: !lambda 'if (id(current_volts).state > 0) return id(ct1Amps).state * id(current_volts).state; else return 0;'
 
-# Watts 
+# Channel 2: EV
+  - platform: ct_clamp
+    sensor: adc_sensor
+    name: ct2Amps, EV
+    id: ct2Amps
+    unit_of_measurement: A
+    device_class: current
+    accuracy_decimals: 5
+    sample_duration: 200ms
+    update_interval: ${ct_update_time}
+    filters:
+      - calibrate_linear:
+          - ${intoZero} -> 0
+          - ${logs125w} -> ${known125w}
+          - ${logs900w} -> ${known900w}
+          - ${logs2300w} -> ${known2300w}
+          - ${logs3300w} -> ${known3300w}
+          - ${logs6000w} -> ${known6000w}
+      # filter less than 230W, equates no power throughput
+      - lambda: |-
+          if (x > 1) return x;
+          else return 0;
+    # When Current updates, update Watts
+    on_value:
+      then:
+        - sensor.template.publish:
+            id: ct2Watts
+            # state: !lambda 'return id(ct2Amps).state * id(current_volts).state;'
+            state: !lambda 'return id(ct2Amps).state * ${ic1Volts};'
+        - sensor.template.publish:
+            id: ctNetWatts
+            state: !lambda 'return id(ct2Watts).state + id(ct4Watts).state + id(ct3Watts).state + id(washingWatts).state;'
+  
+# Channel 3: Dryer
+  - platform: ct_clamp
+    sensor: adc_sensor
+    name: ct3Amps, dryer
+    id: ct3Amps
+    unit_of_measurement: A
+    device_class: current
+    accuracy_decimals: 5
+    sample_duration: 200ms
+    update_interval: ${ct_update_time}
+    filters:
+      - calibrate_linear:
+          - ${intoZero} -> 0
+          # - ${logs125w} -> ${known125w}
+          # - ${logs900w} -> ${known900w}
+          - ${logs2300w} -> ${known2300w}
+          # - ${logs3300w} -> ${known3300w}
+          # - ${logs6000w} -> ${known6000w}
+      # filter less than 230W, equates no power throughput
+      - lambda: |-
+          if (x > 1) return x;
+          else return 0;
+    # When Current updates, update Watts
+    on_value:
+      then:
+        - sensor.template.publish:
+            id: ct3Watts
+            # state: !lambda 'return id(ct3Amps).state * id(current_volts).state;'
+            state: !lambda 'return id(ct3Amps).state * ${ic1Volts};'
+        - sensor.template.publish:
+            id: ctNetWatts
+            state: !lambda 'return id(ct2Watts).state + id(ct4Watts).state + id(ct3Watts).state + id(washingWatts).state;'
+  
+# Channel 4: House        
+  - platform: ct_clamp
+    sensor: adc_sensor
+    name: ct4Amps, house
+    id: ct4Amps
+    unit_of_measurement: A
+    device_class: current
+    accuracy_decimals: 5
+    sample_duration: 200ms
+    update_interval: ${ct_update_time}
+    filters:
+      - calibrate_linear:
+          - ${intoZero} -> 0
+          - ${logs125w} -> ${known125w}
+          - ${logs900w} -> ${known900w}
+          - ${logs2300w} -> ${known2300w}
+          - ${logs3300w} -> ${known3300w}
+          - ${logs6000w} -> ${known6000w}
+      # filter nagative
+      - lambda: |-
+          if (x > 0) return x;
+          else return 0;
+    # When Current updates, update Watts
+    on_value:
+      then:
+        - sensor.template.publish:
+            id: ct4Watts
+            # state: !lambda 'return (id(ct4Amps).state * id(current_volts).state) - id(ct3Watts).state - id(washingWatts).state;'
+            state: !lambda 'return (id(ct4Amps).state * ${ic1Volts}) - id(ct3Watts).state - id(washingWatts).state;'
+        - sensor.template.publish:
+            id: ctNetWatts
+            state: !lambda 'return id(ct2Watts).state + id(ct4Watts).state + id(ct3Watts).state + id(washingWatts).state;'
+
+# Watts
+# Washing
+  - platform: template
+    name: ${device_name} Washing watts
+    id: washingWatts
+    accuracy_decimals: 0
+    unit_of_measurement: W
+    device_class: power
+    icon: "mdi:flash-circle"
+    update_interval: ${ct_update_time}
 # Solar
   - platform: template
     name: ${device_name} Solar watts
     id: ct1Watts
-    lambda: return id(ct1Amps).state * ${solarVolts};
     accuracy_decimals: 0
     unit_of_measurement: W
+    device_class: power
     icon: "mdi:flash-circle"
     update_interval: ${ct_update_time}
 # EV
   - platform: template
     name: ${device_name} EV watts
     id: ct2Watts
-    lambda: return id(ct2Amps).state * ${ic1Volts};
     accuracy_decimals: 0
     unit_of_measurement: W
+    device_class: power
     icon: "mdi:flash-circle"
     update_interval: ${ct_update_time}
 # Dryer
   - platform: template
     name: ${device_name} Dryer watts
     id: ct3Watts
-    lambda: return id(ct3Amps).state * ${ic1Volts};
     accuracy_decimals: 0
     unit_of_measurement: W
+    device_class: power
     icon: "mdi:flash-circle"
     update_interval: ${ct_update_time}
 # House
   - platform: template
     name: ${device_name} House watts
     id: ct4Watts
-    lambda: return id(ct4Amps).state * ${ic1Volts};
     accuracy_decimals: 0
     unit_of_measurement: W
+    device_class: power
     icon: "mdi:flash-circle"
     update_interval: ${ct_update_time}
+# Net
+  - platform: template
+    name: ${device_name} Net watts
+    id: ctNetWatts
+    accuracy_decimals: 0
+    unit_of_measurement: W
+    device_class: power
+    icon: "mdi:flash-circle"
+    update_interval: ${update_time}
 
 # kWh
 # Solar
@@ -290,8 +381,39 @@ sensor:
 
 # House
   - platform: total_daily_energy
-    name: ${device_name} Daily Net kWh
+    name: ${device_name} Daily House kWh
     power_id: ct4Watts
     filters:
       - multiply: 0.001
     unit_of_measurement: kWh
+
+# Net
+  - platform: total_daily_energy
+    name: ${device_name} Daily Net kWh
+    power_id: ctNetWatts
+    filters:
+      - multiply: 0.001
+    unit_of_measurement: kWh
+    
+# Price
+# Electricity
+  - platform: template
+    name: ${device_name} electricity price
+    id: electricityPrice
+    accuracy_decimals: 4
+    unit_of_measurement: £/kWh
+    device_class: monetary
+    icon: "mdi:currency-gbp"
+    update_interval: 3600s
+    lambda: return 0.2019;
+    
+# Gas
+  - platform: template
+    name: ${device_name} gas price
+    id: gasPrice
+    accuracy_decimals: 4
+    unit_of_measurement: £/kWh
+    device_class: monetary
+    icon: "mdi:currency-gbp"
+    update_interval: 3600s
+    lambda: return 0.0418;
