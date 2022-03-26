@@ -12,7 +12,7 @@ script: !include scripts.yaml
 scene: !include scenes.yaml
 
 # SMTP notification
-notify: !include outlook_config.yaml
+notify: !include gmail_config.yaml
 
 http:
   ssl_certificate: /ssl/fullchain.pem
