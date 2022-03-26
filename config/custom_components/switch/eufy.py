@@ -1,62 +1,78 @@
-"""Support for Eufy switches."""
+"""Support for Eufy devices."""
 import lakeside
+import voluptuous as vol
 
-from homeassistant.components.switch import SwitchEntity
+from homeassistant.const import (
+    CONF_ACCESS_TOKEN,
+    CONF_ADDRESS,
+    CONF_DEVICES,
+    CONF_NAME,
+    CONF_PASSWORD,
+    CONF_TYPE,
+    CONF_USERNAME,
+)
+from homeassistant.helpers import discovery
+import homeassistant.helpers.config_validation as cv
+
+DOMAIN = "eufy"
+
+DEVICE_SCHEMA = vol.Schema(
+    {
+        vol.Required(CONF_ADDRESS): cv.string,
+        vol.Required(CONF_ACCESS_TOKEN): cv.string,
+        vol.Required(CONF_TYPE): cv.string,
+        vol.Optional(CONF_NAME): cv.string,
+    }
+)
+
+CONFIG_SCHEMA = vol.Schema(
+    {
+        DOMAIN: vol.Schema(
+            {
+                vol.Optional(CONF_DEVICES, default=[]): vol.All(
+                    cv.ensure_list, [DEVICE_SCHEMA]
+                ),
+                vol.Inclusive(CONF_USERNAME, "authentication"): cv.string,
+                vol.Inclusive(CONF_PASSWORD, "authentication"): cv.string,
+            }
+        )
+    },
+    extra=vol.ALLOW_EXTRA,
+)
+
+EUFY_DISPATCH = {
+    "T1011": "light",
+    "T1012": "light",
+    "T1013": "light",
+    "T1201": "switch",
+    "T1202": "switch",
+    "T1203": "switch",
+    "T1211": "switch",
+}
 
 
-def setup_platform(hass, config, add_entities, discovery_info=None):
-    """Set up Eufy switches."""
-    if discovery_info is None:
-        return
-    add_entities([EufySwitch(discovery_info)], True)
+def setup(hass, config):
+    """Set up Eufy devices."""
 
+    if CONF_USERNAME in config[DOMAIN] and CONF_PASSWORD in config[DOMAIN]:
+        data = lakeside.get_devices(
+            config[DOMAIN][CONF_USERNAME], config[DOMAIN][CONF_PASSWORD]
+        )
+        for device in data:
+            kind = device["type"]
+            if kind not in EUFY_DISPATCH:
+                continue
+            discovery.load_platform(hass, EUFY_DISPATCH[kind], DOMAIN, device, config)
 
-class EufySwitch(SwitchEntity):
-    """Representation of a Eufy switch."""
+    for device_info in config[DOMAIN][CONF_DEVICES]:
+        kind = device_info["type"]
+        if kind not in EUFY_DISPATCH:
+            continue
+        device = {}
+        device["address"] = device_info["address"]
+        device["code"] = device_info["access_token"]
+        device["type"] = device_info["type"]
+        device["name"] = device_info["name"]
+        discovery.load_platform(hass, EUFY_DISPATCH[kind], DOMAIN, device, config)
 
-    def __init__(self, device):
-        """Initialize the light."""
-
-        self._state = None
-        self._name = device["name"]
-        self._address = device["address"]
-        self._code = device["code"]
-        self._type = device["type"]
-        self._switch = lakeside.switch(self._address, self._code, self._type)
-        self._switch.connect()
-
-    def update(self):
-        """Synchronise state from the switch."""
-        self._switch.update()
-        self._state = self._switch.power
-
-    @property
-    def unique_id(self):
-        """Return the ID of this light."""
-        return self._address
-
-    @property
-    def name(self):
-        """Return the name of the device if any."""
-        return self._name
-
-    @property
-    def is_on(self):
-        """Return true if device is on."""
-        return self._state
-
-    def turn_on(self, **kwargs):
-        """Turn the specified switch on."""
-        try:
-            self._switch.set_state(True)
-        except BrokenPipeError:
-            self._switch.connect()
-            self._switch.set_state(power=True)
-
-    def turn_off(self, **kwargs):
-        """Turn the specified switch off."""
-        try:
-            self._switch.set_state(False)
-        except BrokenPipeError:
-            self._switch.connect()
-            self._switch.set_state(False)
+    return True
