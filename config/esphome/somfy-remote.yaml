@@ -1,0 +1,118 @@
+substitutions:
+  device_name: somfy-remote
+
+esphome:
+  name: ${device_name}
+  platform: ESP32
+  board: nodemcu-32s
+  libraries:
+    - SPI
+    - EEPROM
+    - SmartRC-CC1101-Driver-Lib@2.5.7
+    - Somfy_Remote_Lib@0.4.1
+  includes:
+    - somfy_secrets.h
+    - somfy_cover.h
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: !secret somfy_fallback_ssid
+    password: !secret esp_fallback_password
+
+captive_portal:
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+  password: !secret api_password
+
+ota:
+  password: !secret ota_password
+    
+# Enable Web server.
+web_server:
+  port: 80
+
+# Sync time with Home Assistant.
+time:
+  - platform: homeassistant
+    id: homeassistant_time
+    
+binary_sensor:
+  - platform: status
+    name: ${device_name} Status
+
+# Sensors with general information.
+sensor:
+  - platform: wifi_signal
+    name: ${device_name} Wifi Signal
+    update_interval: 60s
+  - platform: uptime
+    name: ${device_name} Uptime
+    unit_of_measurement: days
+    update_interval: 300s
+    accuracy_decimals: 2
+    filters:
+      - multiply: 0.000011574
+
+cover:
+  - platform: custom
+    lambda: |-
+      auto somfy_remote = new SomfyESPRemote();
+      somfy_remote->add_cover("somfy", "kitchen", SOMFY_REMOTE_KITCHEN);
+      somfy_remote->add_cover("somfy", "kitchen1", SOMFY_REMOTE_KITCHEN_1);
+      somfy_remote->add_cover("somfy", "kitchen2", SOMFY_REMOTE_KITCHEN_2);
+      somfy_remote->add_cover("somfy", "kitchen3", SOMFY_REMOTE_KITCHEN_3);
+      somfy_remote->add_cover("somfy", "kitchen4", SOMFY_REMOTE_KITCHEN_4);
+      App.register_component(somfy_remote);
+      return somfy_remote->covers;
+
+    covers:
+      - id: "somfy"
+        name: "Somfy Cover"
+      - id: "somfy1"
+        name: "Somfy Cover1"
+      - id: "somfy2"
+        name: "Somfy Cover2"
+      - id: "somfy3"
+        name: "Somfy Cover3"
+      - id: "somfy4"
+        name: "Somfy Cover4"
+
+switch:
+  - platform: template
+    name: "STOP"
+    turn_on_action:
+      - lambda: |-
+          ((SomfyESPCover*)id(somfy))->make_call().set_command_stop();
+  - platform: template
+    name: "PROG"
+    turn_on_action:
+      - lambda: |-
+          ((SomfyESPCover*)id(somfy))->program();
+  - platform: template
+    name: "PROG1"
+    turn_on_action:
+      - lambda: |-
+          ((SomfyESPCover*)id(somfy1))->program();
+  - platform: template
+    name: "PROG2"
+    turn_on_action:
+      - lambda: |-
+          ((SomfyESPCover*)id(somfy2))->program();
+  - platform: template
+    name: "PROG3"
+    turn_on_action:
+      - lambda: |-
+          ((SomfyESPCover*)id(somfy3))->program();
+  - platform: template
+    name: "PROG4"
+    turn_on_action:
+      - lambda: |-
+          ((SomfyESPCover*)id(somfy4))->program();
