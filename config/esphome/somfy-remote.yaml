@@ -47,6 +47,12 @@ time:
 binary_sensor:
   - platform: status
     name: ${device_name} Status
+    
+text_sensor:
+  - platform: wifi_info
+    ip_address:
+      name: ${device_name} IP Address
+      disabled_by_default: true
 
 # Sensors with general information.
 sensor:
