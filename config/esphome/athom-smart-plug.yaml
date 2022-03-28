@@ -1,5 +1,5 @@
 substitutions:
-  device_name: athom-smart-plug-0fe684
+  device_name: athom-smart-plug
   friendly_name: Athom Smart Plug
   project_name: 'athom.smart-plug'
   project_version: '1.0'
@@ -32,7 +32,7 @@ wifi:
   # Enable fallback hotspot (captive portal) in case wifi connection fails
   ap:
     ssid: !secret athom_smart_plug_ssid
-    password: !secret athom_smart_plug_password
+    password: !secret esp_fallback_password
 
 captive_portal:
 
