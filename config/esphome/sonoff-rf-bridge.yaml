@@ -70,6 +70,12 @@ binary_sensor:
     rc_switch_raw:
       code: "001011101011100011000010"
       protocol: 6
+      
+text_sensor:
+  - platform: wifi_info
+    ip_address:
+      name: ${device_name} IP Address
+      disabled_by_default: true
 
 remote_receiver:
   pin: 
@@ -90,20 +96,6 @@ status_led:
   pin:
     number: GPIO13
     inverted: yes
-
-# Text sensors with general information.
-#text_sensor:
-#  # Expose ESPHome version as sensor.
-#  - platform: version
-#    name: Doorbell ESPHome Version
-#  # Expose WiFi information as sensors.
-#  - platform: wifi_info
-#    ip_address:
-#      name: Doorbell IP
-#    ssid:
-#      name: Doorbell SSID
-#    bssid:
-#      name: Doorbell BSSID
 
 # this is important as the RF chip talks to esp on these pins at this baud rate
 #uart:
