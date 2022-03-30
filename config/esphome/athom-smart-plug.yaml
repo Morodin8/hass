@@ -1,5 +1,5 @@
 substitutions:
-  device_name: athom-smart-plug
+  device_name: athom-smart-plug # create without number, then update
   friendly_name: Athom Smart Plug
   project_name: 'athom.smart-plug'
   project_version: '1.0'
