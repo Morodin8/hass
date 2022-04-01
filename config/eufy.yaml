@@ -1,5 +1,5 @@
-devices:
-- address: 192.168.0.11
-  access_token: !secret eufy_token
-  type: T1203
-  name: Smart Plug (UK)
+  devices:
+    - address: !secret eufy_ip
+      access_token: !secret eufy_token
+      type: T1203
+      name: Smart Plug (UK)
