@@ -6,7 +6,6 @@ default_config:
 tts:
   - platform: google_translate
 
-group: !include groups.yaml
 automation: !include automations.yaml
 script: !include scripts.yaml
 scene: !include scenes.yaml
@@ -14,26 +13,43 @@ scene: !include scenes.yaml
 # SMTP notification
 notify: !include gmail_config.yaml
 
+eufy: !include eufy.yaml
+      
+# nest: !include nest_config.yaml
+  
+google_assistant: !include google_assistant.yaml
+
 http:
   ssl_certificate: /ssl/fullchain.pem
   ssl_key: /ssl/privkey.pem
   
-sensor:
-  - platform: dht
-    sensor: DHT11
-    pin: 4
-    monitored_conditions:
-      - temperature
-      - humidity
+# downloader:
+#   download_dir: downloads
 
-eufy:
-  devices:
-    - address: 192.168.0.11
-      access_token: !secret eufy_token
-      type: T1203
-      name: Smart Plug (UK)
-      
-nest: !include nest_config.yaml
-  
-# Example configuration.yaml entry
-google_assistant: !include google_assistant.yaml
+# sensor:
+#   - platform: dht
+#     sensor: DHT11
+#     pin: 4
+#     monitored_conditions:
+#       - temperature
+#       - humidity
+
+template:
+###### to call weather forecast service to get hourly into a new entity Dec 2023 #####
+  - trigger:
+      - platform: time_pattern
+        hours: "/1"
+    action:
+      - service: weather.get_forecasts
+        data:
+          type: hourly
+        target:
+          entity_id: weather.huis
+        response_variable: hourly
+    sensor:
+      - name: Weather Forecast Hourly
+        unique_id: weather_forecast_hourly
+        icon: mdi:weather-cloudy-clock
+        state: "{{ now().isoformat() }}"
+        attributes:
+          forecast: "{{ hourly['weather.huis']['forecast'] }}"
