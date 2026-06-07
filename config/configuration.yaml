@@ -2,6 +2,11 @@
 # Configure a default setup of Home Assistant (frontend, api, etc)
 default_config:
 
+logger:
+  default: info
+  logs:
+    homeassistant.components.shell_command: debug
+
 # Text to speech
 tts:
   - platform: google_translate
@@ -22,9 +27,6 @@ google_assistant: !include google_assistant.yaml
 http:
   ssl_certificate: /ssl/fullchain.pem
   ssl_key: /ssl/privkey.pem
-  
-# downloader:
-#   download_dir: downloads
 
 # sensor:
 #   - platform: dht
@@ -53,3 +55,8 @@ template:
         state: "{{ now().isoformat() }}"
         attributes:
           forecast: "{{ hourly['weather.huis']['forecast'] }}"
+
+shell_command:
+  epg_download: curl -L "https://www.open-epg.com/generate/7XF5aVgfmq.xml" -o /config/www/epg/epg.xml
+  epg_to_sqlite: python /config/www/epg/epg.py
+  epg_search: python /config/www/epg/search.py
