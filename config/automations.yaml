@@ -950,30 +950,53 @@
   mode: single
 - id: '1697276238759'
   alias: Ring rang
-  description: Doorbell rang - record 60 seconds via ring-mqtt
+  description: Doorbell rang - snapshot + record via ring-mqtt
   triggers:
   - entity_id: binary_sensor.front_door_ding_2
     to: 'on'
     trigger: state
   actions:
+  - variables:
+      ts: '{{ now().strftime(''%Y-%m-%dT%H-%M-%S'') }}'
+      base: '{{ ts }}_D'
   - parallel:
     - sequence:
-      - action: switch.turn_on
-        target:
+      - target:
+          entity_id: automation.ring_motion
+        data:
+          stop_actions: true
+        continue_on_error: true
+        action: automation.turn_off
+      - target:
           entity_id: switch.front_door_live_stream
         continue_on_error: true
-      - delay: 00:00:01
-      - action: camera.record
-        target:
+        action: switch.turn_on
+      - target:
           entity_id: camera.03cabcc9_ring_mqtt
         data:
-          filename: /media/ring/{{ now().strftime('%Y-%m-%dT%H-%M-%S') }}_D.mp4
+          filename: /media/ring/{{ base }}.jpg
+        continue_on_error: true
+        action: camera.snapshot
+      - delay:
+          seconds: '{{ 1 if is_state(''sun.sun'', ''above_horizon'') else 2 }}
+
+            '
+      - target:
+          entity_id: camera.03cabcc9_ring_mqtt
+        data:
+          filename: /media/ring/{{ base }}.mp4
           duration: 60
         continue_on_error: true
-      - action: switch.turn_off
-        target:
+        action: camera.record
+      - delay: 00:00:02
+      - target:
           entity_id: switch.front_door_live_stream
         continue_on_error: true
+        action: switch.turn_off
+      - target:
+          entity_id: automation.ring_motion
+        continue_on_error: true
+        action: automation.turn_on
     - sequence:
       - device_id: 0ce007b865643a89a067e35565dd1288
         domain: button
@@ -982,8 +1005,7 @@
       - condition: state
         entity_id: binary_sensor.grays20_is_charging
         state: 'off'
-      - action: media_player.volume_set
-        data:
+      - data:
           volume_level: 0.5
         target:
           device_id:
@@ -993,9 +1015,8 @@
           - e6e163d5a869e9e944b547586507c7d0
           - fba5f93d82666866053fc428d6e4d646
         continue_on_error: true
-        enabled: true
-      - action: media_player.play_media
-        target:
+        action: media_player.volume_set
+      - target:
           entity_id:
           - media_player.clock_radio_2
           - media_player.isla_s_speaker
@@ -1008,33 +1029,51 @@
             media_content_type: audio/mp4
             metadata: {}
         continue_on_error: true
-        enabled: true
-  mode: single
+        action: media_player.play_media
+  mode: parallel
+  max: 3
 - id: '1704204281768'
   alias: Ring motion
-  description: Motion detected - record 20 seconds via ring-mqtt
+  description: Motion detected - snapshot + record via ring-mqtt
   triggers:
   - entity_id: binary_sensor.front_door_motion_2
     to: 'on'
     trigger: state
+  conditions:
+  - condition: state
+    entity_id: binary_sensor.front_door_ding_2
+    state: 'off'
   actions:
-  - action: switch.turn_on
-    target:
+  - variables:
+      ts: '{{ now().strftime(''%Y-%m-%dT%H-%M-%S'') }}'
+      base: '{{ ts }}_M'
+  - target:
       entity_id: switch.front_door_live_stream
     continue_on_error: true
-  - delay: 00:00:01
-  - action: camera.record
-    target:
+    action: switch.turn_on
+  - target:
       entity_id: camera.03cabcc9_ring_mqtt
     data:
-      filename: /media/ring/{{ now().strftime('%Y-%m-%dT%H-%M-%S') }}_M.mp4
+      filename: /media/ring/{{ base }}.jpg
+    continue_on_error: true
+    action: camera.snapshot
+  - delay:
+      seconds: '{{ 1 if is_state(''sun.sun'', ''above_horizon'') else 2 }}
+
+        '
+  - target:
+      entity_id: camera.03cabcc9_ring_mqtt
+    data:
+      filename: /media/ring/{{ base }}.mp4
       duration: 20
     continue_on_error: true
-  - action: switch.turn_off
-    target:
+    action: camera.record
+  - delay: 00:00:02
+  - target:
       entity_id: switch.front_door_live_stream
     continue_on_error: true
-  mode: single
+    action: switch.turn_off
+  mode: restart
 - id: '1707756286804'
   alias: Chime
   description: Low signal
