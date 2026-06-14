@@ -974,7 +974,7 @@
       - target:
           entity_id: camera.03cabcc9_ring_mqtt
         data:
-          filename: /media/ring/{{ base }}.jpg
+          filename: /config/www/ring/{{ base }}.jpg
         continue_on_error: true
         action: camera.snapshot
       - delay:
@@ -984,7 +984,7 @@
       - target:
           entity_id: camera.03cabcc9_ring_mqtt
         data:
-          filename: /media/ring/{{ base }}.mp4
+          filename: /config/www/ring/{{ base }}.mp4
           duration: 60
         continue_on_error: true
         action: camera.record
@@ -1054,7 +1054,7 @@
   - target:
       entity_id: camera.03cabcc9_ring_mqtt
     data:
-      filename: /media/ring/{{ base }}.jpg
+      filename: /config/www/ring/{{ base }}.jpg
     continue_on_error: true
     action: camera.snapshot
   - delay:
@@ -1064,7 +1064,7 @@
   - target:
       entity_id: camera.03cabcc9_ring_mqtt
     data:
-      filename: /media/ring/{{ base }}.mp4
+      filename: /config/www/ring/{{ base }}.mp4
       duration: 20
     continue_on_error: true
     action: camera.record
@@ -1223,3 +1223,33 @@
             insideTemp | float) | round(1) }}°C (outside {{ outsideTemp }}°C vs inside
             {{ insideTemp }}°C) at {{ now().strftime(''%H:%M'') }}'
   mode: single
+- id: '1781424031576'
+  alias: Ring clip action webhook
+  description: Handle keep/delete actions from Ring gallery
+  triggers:
+  - webhook_id: "CHANGE_ME_LONG_RANDOM_ID"
+    allowed_methods:
+    - POST
+    local_only: true
+    trigger: webhook
+  actions:
+  - choose:
+    - conditions:
+      - condition: template
+        value_template: '{{ trigger.json.action == ''keep'' }}'
+      sequence:
+      - data:
+          clip: '{{ trigger.json.clip }}'
+          source: '{{ trigger.json.source }}'
+        action: shell_command.ring_keep_clip
+    - conditions:
+      - condition: template
+        value_template: '{{ trigger.json.action == ''delete'' }}'
+      sequence:
+      - data:
+          clip: '{{ trigger.json.clip }}'
+          source: '{{ trigger.json.source }}'
+        action: shell_command.ring_delete_clip
+  - action: shell_command.ring_rebuild_galleries
+  mode: parallel
+  max: 10
