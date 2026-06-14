@@ -2,9 +2,9 @@
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 LOG="/config/scripts/ring_archive.log"
-SOURCE_DIR="/media/ring"
-ARCHIVE_DIR="/media/ring/archive"
-CONTAINER="ffmpeg-ring"
+SOURCE_DIR="/config/www/ring"
+ARCHIVE_DIR="/config/www/ring/archive"
+
 MAX_LOG_LINES=1000
 LOCKDIR="/tmp/ring_archive.lock"
 MAX_FILES_PER_RUN=20
@@ -50,138 +50,177 @@ get_effort_gauge() {
   fi
 }
 
-# Prevent overlapping runs
-if ! mkdir "$LOCKDIR" 2>/dev/null; then
-  log "WARNING: another archive run is already in progress, exiting"
-  exit 0
-fi
+acquire_lock() {
+  if mkdir "$LOCKDIR" 2>/dev/null; then
+    :
+  else
+    if [ -f "$LOCKDIR/pid" ]; then
+      old_pid=$(cat "$LOCKDIR/pid" 2>/dev/null)
+
+      if [ -n "$old_pid" ] && kill -0 "$old_pid" 2>/dev/null; then
+        log "WARNING: another archive run is already in progress (pid $old_pid), exiting"
+        exit 0
+      else
+        log "WARNING: stale lock detected (pid ${old_pid:-unknown}), removing"
+        rm -rf "$LOCKDIR"
+        mkdir "$LOCKDIR" || exit 1
+      fi
+    else
+      log "WARNING: lock directory exists without pid file, removing stale lock"
+      rm -rf "$LOCKDIR"
+      mkdir "$LOCKDIR" || exit 1
+    fi
+  fi
+
+  echo "$$" > "$LOCKDIR/pid"
+}
 
 cleanup_lock() {
-  rmdir "$LOCKDIR" 2>/dev/null
+  rm -rf "$LOCKDIR"
   rm -f "$COUNT_FILE"
 }
+
+phase_preclean() {
+  log "--- phase: pre-clean ---"
+
+  find "$SOURCE_DIR" -maxdepth 1 -type f \( -name "*.mp4" -o -name "*.jpg" \) -size 0 -delete >> "$LOG" 2>&1
+
+  find "$SOURCE_DIR" -maxdepth 1 -type f \( -name "*.tmp" -o -name "*.tmp.mp4" \) -mmin +30 -delete >> "$LOG" 2>&1
+  find "$ARCHIVE_DIR" -maxdepth 1 -type f \( -name "*.tmp" -o -name "*.tmp.mp4" \) -mmin +30 -delete >> "$LOG" 2>&1
+}
+
+phase_archive() {
+  log "--- phase: archive/compress ---"
+
+  ELIGIBLE_COUNT=$(find "$SOURCE_DIR" -maxdepth 1 -type f -name "*.mp4" -mmin +1440 | wc -l | tr -d ' ')
+
+  if [ "$ELIGIBLE_COUNT" -gt "$MAX_FILES_PER_RUN" ]; then
+    log "WARNING: $ELIGIBLE_COUNT eligible files found, limit=$MAX_FILES_PER_RUN"
+  fi
+
+  find "$SOURCE_DIR" -maxdepth 1 -type f -name "*.mp4" -mmin +1440 \
+    -exec ls -1tr {} + 2>/dev/null | head -n "$MAX_FILES_PER_RUN" | \
+  while read -r f; do
+    [ -n "$f" ] || continue
+
+    name="$(basename "$f")"
+    base="${name%.mp4}"
+
+    out="$ARCHIVE_DIR/$name"
+    tmp="$ARCHIVE_DIR/${base}.tmp.mp4"
+    jpg_src="$SOURCE_DIR/$base.jpg"
+    jpg_dst="$ARCHIVE_DIR/$base.jpg"
+
+    # Skip empty files
+    if [ ! -s "$f" ]; then
+      log "Removing zero-byte: $name"
+      rm -f "$f"
+      continue
+    fi
+
+    # If already archived, just move matching jpg if needed
+    if [ -e "$out" ]; then
+      if [ -f "$jpg_src" ] && [ ! -e "$jpg_dst" ]; then
+        mv "$jpg_src" "$jpg_dst" 2>/dev/null && log "Moved snapshot to existing archive set: $base.jpg"
+      fi
+      continue
+    fi
+
+    # Quick validity check - skip clearly broken clips
+    if ! ffmpeg -nostdin -v error -i "$f" -f null - >/dev/null 2>&1; then
+      log "Skipping corrupt clip: $name"
+      continue
+    fi
+
+    rm -f "$tmp"
+    log "Compressing: $name"
+
+    if ffmpeg -nostdin -y -i "$f" \
+        -c:v libx264 -preset fast -crf 30 \
+        -c:a aac -b:a 96k \
+        "$tmp" >/dev/null 2>&1; then
+
+      if [ -s "$tmp" ]; then
+        if mv "$tmp" "$out"; then
+          if rm -f "$f"; then
+            [ -f "$jpg_src" ] && mv "$jpg_src" "$jpg_dst" 2>/dev/null
+
+            count=$(cat "$COUNT_FILE")
+            echo $((count + 1)) > "$COUNT_FILE"
+
+            log "Success: $name"
+          else
+            log "WARNING: compressed but original not removed: $name"
+          fi
+        else
+          log "ERROR: failed to move output: $name"
+          rm -f "$tmp"
+        fi
+      else
+        log "ERROR: empty output: $name"
+        rm -f "$tmp"
+      fi
+    else
+      log "ERROR: ffmpeg failed: $name"
+      rm -f "$tmp"
+    fi
+  done
+
+  REMAINING_COUNT=$(find "$SOURCE_DIR" -maxdepth 1 -type f -name "*.mp4" -mmin +1440 | wc -l | tr -d ' ')
+}
+
+phase_retention() {
+  log "--- phase: retention cleanup ---"
+
+  find "$ARCHIVE_DIR" -maxdepth 1 -type f \
+    \( -name "*.mp4" -o -name "*.jpg" \) \
+    -mmin +40320 -delete >> "$LOG" 2>&1
+}
+
+phase_gallery() {
+  log "--- phase: gallery rebuild ---"
+  /bin/sh /config/scripts/ring_rebuild_galleries.sh >> "$LOG" 2>&1
+}
+
+phase_finish() {
+  log "--- phase: finish ---"
+
+  if [ -f "$LOG" ]; then
+    tail -n "$MAX_LOG_LINES" "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
+  fi
+
+  END_TS=$(date +%s)
+  DURATION=$((END_TS - START_TS))
+  COMPRESSED_COUNT=$(cat "$COUNT_FILE")
+
+  log_host_load
+  get_effort_gauge
+
+  log "Summary: queued=$ELIGIBLE_COUNT compressed=$COMPRESSED_COUNT remaining=$REMAINING_COUNT duration=${DURATION}s effort=$EFFORT_LABEL $EFFORT_GAUGE load=$LOAD1/$LOAD5/$LOAD15"
+  log "=== host-side ring archive run finished ==="
+  log "--------------------------------------------------"
+}
+
+# --- main ---
+
 trap cleanup_lock EXIT INT TERM
 
-mkdir -p "$ARCHIVE_DIR"
+mkdir -p "$SOURCE_DIR" "$ARCHIVE_DIR"
 echo 0 > "$COUNT_FILE"
+
+acquire_lock
 
 log "=== host-side ring archive run started ==="
 log_host_load
 
-# Check ffmpeg container is available
-if ! docker exec "$CONTAINER" ffmpeg -version >/dev/null 2>&1; then
-  log "ERROR: ffmpeg container '$CONTAINER' is not available"
+# check ffmpeg exists
+if ! command -v ffmpeg >/dev/null 2>&1; then
+  log "ERROR: ffmpeg not found"
   exit 1
 fi
 
-# 1) Clean zero-byte media files in source
-log "Cleaning zero-byte media files in source"
-find "$SOURCE_DIR" -maxdepth 1 -type f \( -name "*.mp4" -o -name "*.jpg" \) -size 0 -print -delete >> "$LOG" 2>&1
-
-# 2) Clean stale temp files in source/archive
-log "Cleaning stale temp files"
-find "$SOURCE_DIR" -maxdepth 1 -type f \( -name "*.tmp" -o -name "*.tmp.mp4" \) -mmin +30 -print -delete >> "$LOG" 2>&1
-find "$ARCHIVE_DIR" -maxdepth 1 -type f \( -name "*.tmp" -o -name "*.tmp.mp4" \) -mmin +30 -print -delete >> "$LOG" 2>&1
-
-# 3) Count eligible videos older than 1 day
-ELIGIBLE_COUNT=$(find "$SOURCE_DIR" -maxdepth 1 -type f -name "*.mp4" -mmin +1440 | wc -l | tr -d ' ')
-
-if [ "$ELIGIBLE_COUNT" -gt "$MAX_FILES_PER_RUN" ]; then
-  log "WARNING: $ELIGIBLE_COUNT eligible files found, but max files per run is $MAX_FILES_PER_RUN. Remaining files will be processed in later runs."
-fi
-
-# 4) Compress up to MAX_FILES_PER_RUN oldest eligible videos
-find "$SOURCE_DIR" -maxdepth 1 -type f -name "*.mp4" -mmin +1440 -exec ls -1tr {} + 2>/dev/null | head -n "$MAX_FILES_PER_RUN" | while read -r f; do
-  [ -n "$f" ] || continue
-
-  name="$(basename "$f")"
-  base="$(basename "$f" .mp4)"
-  out="$ARCHIVE_DIR/${base}.mp4"
-  tmp="$ARCHIVE_DIR/${base}.tmp.mp4"
-  jpg_src="$SOURCE_DIR/${base}.jpg"
-  jpg_dst="$ARCHIVE_DIR/${base}.jpg"
-
-  # Skip empty files
-  if [ ! -s "$f" ]; then
-    log "Removing zero-byte file during archive pass: $f"
-    rm -f "$f"
-    continue
-  fi
-
-  # If mp4 archive already exists, try to move matching jpg if needed
-  if [ -e "$out" ]; then
-    if [ -f "$jpg_src" ] && [ ! -e "$jpg_dst" ]; then
-      if mv "$jpg_src" "$jpg_dst"; then
-        log "Moved snapshot to existing archive set: $jpg_src -> $jpg_dst"
-      else
-        log "WARNING: failed to move snapshot: $jpg_src"
-      fi
-    fi
-    log "Skipping (already exists): $out"
-    continue
-  fi
-
-  rm -f "$tmp"
-  log "Compressing: $f -> $out"
-
-  if docker exec "$CONTAINER" ffmpeg \
-      -y -i "/data/$name" \
-      -c:v libx264 -preset fast -crf 30 \
-      -c:a aac -b:a 96k \
-      "/data/archive/${base}.tmp.mp4" >/dev/null 2>&1; then
-
-    if [ -s "$tmp" ]; then
-      if mv "$tmp" "$out"; then
-        if rm -f "$f"; then
-          log "Success: compressed and removed original: $f"
-
-          if [ -f "$jpg_src" ]; then
-            if mv "$jpg_src" "$jpg_dst"; then
-              log "Moved snapshot: $jpg_src -> $jpg_dst"
-            else
-              log "WARNING: failed to move snapshot: $jpg_src"
-            fi
-          fi
-
-          count=$(cat "$COUNT_FILE" 2>/dev/null || echo 0)
-          count=$((count + 1))
-          echo "$count" > "$COUNT_FILE"
-        else
-          log "WARNING: compressed but failed to remove original: $f"
-        fi
-      else
-        log "ERROR: failed to move temp file into place: $tmp -> $out"
-        rm -f "$tmp"
-      fi
-    else
-      log "ERROR: output file empty: $tmp"
-      rm -f "$tmp"
-    fi
-  else
-    log "ERROR: ffmpeg failed: $f"
-    rm -f "$tmp"
-  fi
-done
-
-# 5) Count remaining eligible files after run
-REMAINING_COUNT=$(find "$SOURCE_DIR" -maxdepth 1 -type f -name "*.mp4" -mmin +1440 | wc -l | tr -d ' ')
-
-# 6) Delete archived media older than 4 weeks (28 days)
-log "Cleaning archived media older than 28 days"
-find "$ARCHIVE_DIR" -maxdepth 1 -type f \( -name "*.mp4" -o -name "*.jpg" \) -mmin +40320 -print -delete >> "$LOG" 2>&1
-
-# 7) Trim log
-if [ -f "$LOG" ]; then
-  log "Trimming log to last $MAX_LOG_LINES lines"
-  tail -n "$MAX_LOG_LINES" "$LOG" > "${LOG}.tmp" && mv "${LOG}.tmp" "$LOG"
-fi
-
-END_TS=$(date +%s)
-DURATION=$((END_TS - START_TS))
-COMPRESSED_COUNT=$(cat "$COUNT_FILE" 2>/dev/null || echo 0)
-
-log_host_load
-get_effort_gauge
-log "Summary: queued=${ELIGIBLE_COUNT} compressed=${COMPRESSED_COUNT} remaining=${REMAINING_COUNT} duration=${DURATION}s max=${MAX_FILES_PER_RUN} effort=${EFFORT_LABEL} ${EFFORT_GAUGE} load=${LOAD1}/${LOAD5}/${LOAD15}"
-log "=== host-side ring archive run finished ==="
-log "--------------------------------------------------"
+phase_preclean
+phase_archive
+phase_retention
+phase_gallery
+phase_finish
