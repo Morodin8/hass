@@ -7,6 +7,7 @@ logger:
   logs:
     homeassistant.components.shell_command: debug
 
+ffmpeg:
 # Text to speech
 tts:
   - platform: google_translate
@@ -57,6 +58,13 @@ template:
           forecast: "{{ hourly['weather.huis']['forecast'] }}"
 
 shell_command:
+  ring_keep_clip: >-
+    /bin/sh /config/scripts/ring_keep_clip.sh "{{ clip }}" "{{ source }}"
+  ring_delete_clip: >-
+    /bin/sh /config/scripts/ring_delete_clip.sh "{{ clip }}" "{{ source }}"
+  ring_rebuild_galleries: >-
+    /bin/sh /config/scripts/ring_rebuild_galleries.sh
+
   epg_download: curl -L "https://www.open-epg.com/generate/7XF5aVgfmq.xml" -o /config/www/epg/epg.xml
   epg_to_sqlite: python /config/www/epg/epg.py
   epg_search: python /config/www/epg/search.py
